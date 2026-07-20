@@ -181,31 +181,21 @@ def run_generation(
 
         # Build the prompt (shared across num_samples for this type)
         # Use the first sample's prompt as base; variations come from diffusion
-        base_prompt = samples[0].prompt
-        num_frames = int(samples[0].duration * config.global_.fps)
-
-        # Build constraints (Root2D path for velocity control)
-        constraints = build_constraints_json(samples[0], fps=config.global_.fps)
+        # Generate: per-sample prompts, frames, constraints via list API
+        base_prompt = samples[0].prompt  # for display only
+        num_frames = int(samples[0].duration * config.global_.fps)  # for display
 
         print(f"  Prompt:  {base_prompt}")
         print(f"  Frames:  {num_frames} ({samples[0].duration:.1f}s)")
-        if constraints:
-            print(f"  Constraints: {len(constraints)} set(s)")
-            for c in constraints:
-                nf = len(c.get("frame_indices", []))
-                has_heading = "global_root_heading" in c
-                print(f"    - {c['type']}: {nf} frames"
-                      f"{' + heading' if has_heading else ''}")
+        print(f"  Constraint per sample (e.g.): vx={samples[0].vel.get('vx',0):.2f} "
+              f"vy={samples[0].vel.get('vy',0):.2f} wz={samples[0].vel.get('wz',0):.2f}")
+        print(f"  Per-sample mode: {n} unique constraints + prompts + durations")
 
-        # Generate
         t0 = time.time()
         _generate_batch(
             config=config,
             samples=samples,
-            prompt=base_prompt,
-            num_frames=num_frames,
-            constraint_lst=constraints,
-            out_dir=output_base,  # rltracker: flat output; kimodo: per-type subdir
+            out_dir=output_base,
             device=device,
             preset=preset,
         )
@@ -227,17 +217,17 @@ def run_generation(
 def _generate_batch(
     config: LocomotionConfig,
     samples: list[SampledMotion],
-    prompt: str,
-    num_frames: int,
-    constraint_lst: list[dict],
     out_dir: Path,
     device: str,
     preset: str = "kimodo",
 ):
     """Call Kimodo Python API to generate one batch of motions.
 
-    One Kimodo model() call with num_samples=N produces N variations
-    from the same prompt and constraints.
+    Uses Kimodo's **list API**: passing ``prompts`` as a list of strings,
+    ``num_frames`` as a list of ints, and ``constraint_lst`` as a list of
+    per-sample constraint lists causes each sample to get its OWN prompt,
+    duration and Root2D path — the velocity distribution from the sampler
+    actually takes effect.
 
     Args:
         preset: "kimodo" for default NPZ+CSV output, "rltracker" for
@@ -254,31 +244,44 @@ def _generate_batch(
     )
 
     n = len(samples)
+    fps = config.global_.fps
+    seed_val = config.global_.seed if config.global_.seed is not None else 0
 
-    # Parse constraints into Kimodo objects
-    kimodo_constraints = []
-    if constraint_lst:
-        kimodo_constraints = load_constraints_lst(
-            constraint_lst, model.skeleton, device=device
+    # ── Build per-sample lists (the key fix) ─────────────────────────
+    per_prompts: list[str] = []
+    per_frames: list[int] = []
+    per_constraints_raw: list[list[dict]] = []
+
+    for s in samples:
+        per_prompts.append(s.prompt)
+        per_frames.append(int(s.duration * fps))
+        per_constraints_raw.append(
+            build_constraints_json(s, fps=fps)
         )
 
-    seed_val = None
-    if config.global_.seed is not None:
-        seed_val = config.global_.seed
+    # Convert to Kimodo constraint objects
+    per_kimodo_constraints: list[list] = []
+    for raw_lst in per_constraints_raw:
+        if raw_lst:
+            per_kimodo_constraints.append(
+                load_constraints_lst(raw_lst, model.skeleton, device=device)
+            )
+        else:
+            per_kimodo_constraints.append([])
 
-    # Generate
+    # Use list-of-constraints to signal per-sample mode
+    kimodo_constraints = per_kimodo_constraints  # list[list]
+
+    # ── Generate: list API → each sample gets its own prompt + constraint ──
     output = model(
-        prompt,
-        num_frames,
-        constraint_lst=kimodo_constraints,
+        per_prompts,               # list[str] → num_samples = len(prompts)
+        per_frames,                # list[int] → per-sample durations
+        constraint_lst=kimodo_constraints,  # list[list] → per-sample
         num_denoising_steps=samples[0].diffusion_steps,
-        num_samples=n,
         return_numpy=True,
     )
 
-    fps = config.global_.fps
-
-    # Export per-sample
+    # ── Export per-sample ─────────────────────────────────────────────
     for i, sample in enumerate(samples):
         single = {
             k: (v[i] if hasattr(v, "shape") and len(v.shape) > 0
@@ -293,7 +296,7 @@ def _generate_batch(
                 fps=fps,
                 sample_idx=i,
                 sample=sample,
-                seed=seed_val or 0,
+                seed=seed_val,
                 output_base=out_dir,
                 device=device,
             )
@@ -359,43 +362,17 @@ def _export_rltracker(
 ):
     """Export one motion in RLTracker dataset format.
 
-    Uses the model output (already contains posed_joints, global_rot_mats,
-    local_rot_mats, root_positions from complete_motion_dict) directly,
-    resampling to the RLTracker target FPS (50 Hz) to match the reference
-    dataset convention.
+    Output at Kimodo's **native** 30 fps.  No temporal resampling is applied —
+    resampling artefacts at wrist joints were causing body flickering in the
+    simulator.  The RLTracker viewer handles the fps mismatch.
     """
     import numpy as np
-    import torch
-    from kimodo.exports.motion_io import resample_motion_dict_to_kimodo_fps
 
-    TARGET_FPS = 50.0
-
-    # Convert to torch tensors on device
-    motion_dict = {
-        k: torch.from_numpy(np.asarray(v)).float().to(device)
-        for k, v in single.items()
-        if k in ("local_rot_mats", "root_positions", "posed_joints",
-                  "global_rot_mats", "foot_contacts", "smooth_root_pos",
-                  "global_root_heading")
-    }
-
-    # Resample from generation FPS to target FPS if needed
-    if abs(float(fps) - TARGET_FPS) > 0.5:
-        motion_dict, _did_resample = resample_motion_dict_to_kimodo_fps(
-            motion_dict, model.skeleton, float(fps), TARGET_FPS
-        )
-        out_fps = TARGET_FPS
-    else:
-        out_fps = float(fps)
-
-    # Convert back to numpy
-    def _to_np(t):
-        return t.detach().cpu().numpy().astype(np.float32)
-
-    posed_joints_np = _to_np(motion_dict["posed_joints"])
-    global_rot_mats_np = _to_np(motion_dict["global_rot_mats"])
-    local_rot_mats_np = _to_np(motion_dict["local_rot_mats"])
-    root_positions_np = _to_np(motion_dict["root_positions"])
+    # Model output already has all 7 keys as numpy arrays (return_numpy=True)
+    posed_joints_np = np.asarray(single["posed_joints"]).astype(np.float32)
+    global_rot_mats_np = np.asarray(single["global_rot_mats"]).astype(np.float32)
+    local_rot_mats_np = np.asarray(single["local_rot_mats"]).astype(np.float32)
+    root_positions_np = np.asarray(single["root_positions"]).astype(np.float32)
 
     from .export_presets import get_preset
     exporter = get_preset("rltracker")
@@ -404,7 +381,7 @@ def _export_rltracker(
         global_rot_mats=global_rot_mats_np,
         local_rot_mats=local_rot_mats_np,
         root_positions=root_positions_np,
-        fps=float(out_fps),
+        fps=float(fps),
         sample_idx=sample_idx,
         motion_type=sample.motion_type,
         vel=sample.vel,
@@ -504,15 +481,10 @@ def main():
 
         for type_name, samples in by_type.items():
             print(f"\n[{type_name}] {len(samples)} samples")
-            constraints = build_constraints_json(samples[0])
-            num_frames = int(samples[0].duration * config.global_.fps)
 
             _generate_batch(
                 config=config,
                 samples=samples,
-                prompt=samples[0].prompt,
-                num_frames=num_frames,
-                constraint_lst=constraints,
                 out_dir=output_base,
                 device=f"cuda:{config.global_.gpu}",
                 preset=preset,

@@ -28,8 +28,8 @@ global:
 motion_types:
   # ── Walk — all directions, all turning rates ───────────────────
   walk:
-    description: "a robot walks"
-    duration: [2.0, 8.0]
+    description: "a person walks"
+    duration: [5.0, 8.0]
     vel_cmd:
       # forward (+) / backward (-), full walking speed range
       vx: [-0.60, 0.80]
@@ -46,8 +46,8 @@ motion_types:
 
   # ── Run — forward only ─────────────────────────────────────────
   run:
-    description: "a robot runs"
-    duration: [2.0, 5.0]
+    description: "a person runs"
+    duration: [5.0, 8.0]
     vel_cmd:
       vx: [0.80, 2.00]
       vy: [-0.10, 0.10]
@@ -61,8 +61,8 @@ motion_types:
 
   # ── Stand ──────────────────────────────────────────────────────
   stand:
-    description: "a robot stands still"
-    duration: [2.0, 6.0]
+    description: "a person stands still"
+    duration: [5.0, 8.0]
     vel_cmd:
       vx: [-0.02, 0.02]
       vy: [-0.02, 0.02]
@@ -76,8 +76,8 @@ motion_types:
 
   # ── Squat ──────────────────────────────────────────────────────
   squat_move:
-    description: "a robot squats and moves"
-    duration: [1.5, 5.0]
+    description: "a person squats and moves"
+    duration: [5.0, 8.0]
     vel_cmd:
       vx: [-0.20, 0.30]
       vy: [-0.10, 0.10]

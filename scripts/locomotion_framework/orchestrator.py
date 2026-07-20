@@ -274,7 +274,6 @@ def _generate_batch(
         num_denoising_steps=samples[0].diffusion_steps,
         num_samples=n,
         return_numpy=True,
-        seed=seed_val,
     )
 
     fps = config.global_.fps

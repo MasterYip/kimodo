@@ -1,0 +1,31 @@
+#!/bin/bash
+# =============================================================================
+# Kimodo Environment Setup — source this before any kimodo command
+#
+# Usage:
+#   source scripts/env.sh
+#   kimodo_gen "a robot walks." --model kimodo-g1-rp -d 5.0 -o output
+# =============================================================================
+
+# ---- install paths (edit if you moved the repo) ----
+KIMODO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+VENV="/data/masteryip/kimodo/.venv"
+
+# ---- activate virtual environment ----
+if [ -f "${VENV}/bin/activate" ]; then
+    source "${VENV}/bin/activate"
+fi
+
+# ---- Hugging Face mirror (direct access — no proxy needed) ----
+export HF_ENDPOINT=https://hf-mirror.com
+
+# ---- Text encoder: standalone NF4 model (no gated Llama dependency) ----
+export TEXT_ENCODER=llm2vec-nf4
+
+# ---- Cache paths ----
+export HF_HOME="${KIMODO_ROOT}/../.cache/huggingface"
+
+# ---- GPU defaults ----
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+
+echo "[kimodo] HF_ENDPOINT=${HF_ENDPOINT}  TEXT_ENCODER=${TEXT_ENCODER}"

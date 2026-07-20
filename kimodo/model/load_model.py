@@ -30,6 +30,26 @@ TEXT_ENCODER_PRESETS = {
             "llm_dim": 4096,
             "device": "auto",
         },
+    },
+    "llm2vec-llama31": {
+        "target": "kimodo.model.LLM2VecEncoder",
+        "kwargs": {
+            "base_model_name_or_path": "McGill-NLP/LLM2Vec-Meta-Llama-31-8B-Instruct-mntp",
+            "peft_model_name_or_path": "McGill-NLP/LLM2Vec-Meta-Llama-31-8B-Instruct-mntp-supervised",
+            "dtype": "bfloat16",
+            "llm_dim": 4096,
+            "device": "auto",
+        },
+    },
+    "llm2vec-nf4": {
+        "target": "kimodo.model.LLM2VecEncoder",
+        "kwargs": {
+            "base_model_name_or_path": "Aero-Ex/KIMODO-Meta3_llm2vec_NF4",
+            "peft_model_name_or_path": None,
+            "dtype": "bfloat16",
+            "llm_dim": 4096,
+            "device": "auto",
+        },
     }
 }
 

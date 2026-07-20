@@ -170,7 +170,10 @@ class LLM2Vec(nn.Module):
         return cls(model=model, tokenizer=tokenizer, **config)
 
     def prepare_for_tokenization(self, text):
-        if self.model.config._name_or_path == "meta-llama/Meta-Llama-3-8B-Instruct":
+        if self.model.config._name_or_path in [
+            "meta-llama/Meta-Llama-3-8B-Instruct",
+            "meta-llama/Meta-Llama-3.1-8B-Instruct",
+        ]:
             text = "<|start_header_id|>user<|end_header_id|>\n\n" + text.strip() + "<|eot_id|>"
             return text
         if self.model.config._name_or_path in [

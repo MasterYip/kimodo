@@ -1,0 +1,179 @@
+# =============================================================================
+# G1 Locomotion Motion Generation — Distribution Config
+#
+# Each motion_type defines a distribution over:
+#   - Text descriptions (action type)
+#   - Velocity commands (vx, vy, wz — sampled from uniform ranges)
+#   - Torso height (sampled from uniform range → text hint)
+#   - Duration (sampled from uniform range)
+#   - Style modifiers
+#   - Sampling weight (relative probability)
+#   - num_samples (how many to generate from this type per batch)
+#
+# Usage:
+#   cd /data/masteryip/kimodo/kimodo
+#   source scripts/env.sh
+#   PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
+#       -c scripts/locomotion_framework/configs/g1_locomotion.yaml
+# =============================================================================
+
+global:
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 42
+  output_dir: outputs/locomotion
+
+motion_types:
+  # ── Standing / Idle ────────────────────────────────────────────
+  stand:
+    description: "a robot stands still"
+    duration: [2.0, 5.0]
+    vel_cmd:
+      vx: [-0.02, 0.02]
+      vy: [-0.02, 0.02]
+      wz: [-0.02, 0.02]
+    torso_height: [0.70, 0.90]
+    styles:
+      - "idle"
+      - "at attention"
+      - "looking around"
+      - "shifting weight"
+    weight: 0.10
+    num_samples: 10
+
+  # ── Walking ─────────────────────────────────────────────────────
+  walk:
+    description: "a robot walks forward"
+    duration: [3.0, 8.0]
+    vel_cmd:
+      vx: [0.2, 0.8]
+      vy: [-0.08, 0.08]
+      wz: [-0.10, 0.10]
+    torso_height: [0.65, 0.85]
+    styles:
+      - "casually"
+      - "briskly"
+      - "with long strides"
+      - "confidently"
+    weight: 0.25
+    num_samples: 40
+
+  # ── Running ─────────────────────────────────────────────────────
+  run:
+    description: "a robot runs forward"
+    duration: [2.0, 5.0]
+    vel_cmd:
+      vx: [0.8, 2.0]
+      vy: [-0.05, 0.05]
+      wz: [-0.08, 0.08]
+    torso_height: [0.60, 0.80]
+    styles:
+      - "quickly"
+      - "sprinting"
+      - "jogging"
+    weight: 0.10
+    num_samples: 15
+
+  # ── Walking with hand gestures ──────────────────────────────────
+  walk_wave:
+    description: "a robot walks forward while waving its right hand"
+    duration: [3.0, 6.0]
+    vel_cmd:
+      vx: [0.15, 0.50]
+      vy: [-0.05, 0.05]
+      wz: [-0.05, 0.05]
+    torso_height: [0.65, 0.85]
+    styles:
+      - "enthusiastically"
+      - "casually"
+      - "greeting"
+    weight: 0.12
+    num_samples: 20
+
+  walk_raise_hands:
+    description: "a robot walks forward with both hands raised above its head"
+    duration: [2.0, 5.0]
+    vel_cmd:
+      vx: [0.10, 0.40]
+      vy: [-0.05, 0.05]
+      wz: [-0.05, 0.05]
+    torso_height: [0.65, 0.85]
+    styles:
+      - "celebrating"
+      - "reaching up"
+    weight: 0.08
+    num_samples: 15
+
+  # ── Crouching / Low movements ───────────────────────────────────
+  crouch_walk:
+    description: "a robot crouches and walks forward carefully"
+    duration: [2.0, 5.0]
+    vel_cmd:
+      vx: [0.05, 0.30]
+      vy: [-0.05, 0.05]
+      wz: [-0.08, 0.08]
+    torso_height: [0.40, 0.60]
+    styles:
+      - "stealthily"
+      - "carefully"
+      - "cautiously"
+    weight: 0.08
+    num_samples: 15
+
+  squat_move:
+    description: "a robot squats and moves"
+    duration: [1.5, 4.0]
+    vel_cmd:
+      vx: [-0.10, 0.20]
+      vy: [-0.05, 0.05]
+      wz: [-0.10, 0.10]
+    torso_height: [0.35, 0.50]
+    styles:
+      - "in a deep squat"
+      - "while staying low"
+    weight: 0.07
+    num_samples: 15
+
+  # ── Lateral / Turning ───────────────────────────────────────────
+  sidestep:
+    description: "a robot steps sideways"
+    duration: [1.0, 3.0]
+    vel_cmd:
+      vx: [-0.05, 0.05]
+      vy: [0.10, 0.50]
+      wz: [-0.02, 0.02]
+    torso_height: [0.65, 0.85]
+    styles:
+      - "carefully"
+      - "quickly"
+      - "shuffling"
+    weight: 0.10
+    num_samples: 15
+
+  turn:
+    description: "a robot turns around while walking"
+    duration: [2.0, 5.0]
+    vel_cmd:
+      vx: [0.05, 0.40]
+      vy: [-0.05, 0.05]
+      wz: [0.20, 0.80]
+    torso_height: [0.65, 0.85]
+    styles:
+      - "smoothly"
+      - "sharply"
+    weight: 0.05
+    num_samples: 10
+
+  walk_backward:
+    description: "a robot walks backward"
+    duration: [1.5, 4.0]
+    vel_cmd:
+      vx: [-0.10, -0.40]
+      vy: [-0.05, 0.05]
+      wz: [-0.05, 0.05]
+    torso_height: [0.65, 0.85]
+    styles:
+      - "carefully"
+      - "while looking back"
+    weight: 0.05
+    num_samples: 10

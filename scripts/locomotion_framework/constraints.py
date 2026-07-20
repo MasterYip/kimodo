@@ -1,13 +1,49 @@
-"""Convert sampled velocity commands to Kimodo Root2D constraints."""
+"""Convert sampled velocity commands to Kimodo Root2D constraints.
+
+Velocity → (x,z) path via integration of a cos-eased speed profile:
+
+    Phase 1 (accel, 10%):   0 → target speed
+    Phase 2 (cruise, 80%):  constant target speed
+    Phase 3 (decel, 10%):   target speed → 0
+
+The path is built for a **stretched** duration (3× the actual generation
+duration) so that only the accel + cruise phases fall within the
+constrained frame range.  The model never sees the deceleration tail,
+eliminating the constraint-vs-motion-prior conflict that causes root
+jitter at the end of the motion.
+"""
 
 import numpy as np
 
 from .sampler import SampledMotion
 
+# Stretch factor: the path is built for this many times the generation
+# duration.  With accel/decel each at 10% of the STRETCHED path, the
+# actual generated frames see only accel (first 3.3% of stretched) +
+# cruise (remaining 30% of stretched).  The deceleration begins at frame
+# 0.9 * stretch * N_gen, which is far beyond the last generated frame.
+_PATH_STRETCH = 3.0
 
-def _ease_out_cosine(t: np.ndarray) -> np.ndarray:
-    """Smooth ease-out: 1 → 0 over t ∈ [0, 1].  Derivative is 0 at both ends."""
-    return 0.5 * (1.0 + np.cos(np.pi * t))
+
+def _speed_profile(
+    num_frames_total: int,
+    accel_frac: float = 0.10,
+    decel_frac: float = 0.10,
+) -> np.ndarray:
+    """C¹-smooth speed multiplier ∈ [0, 1] for the **full** stretched path."""
+    s = np.ones(num_frames_total, dtype=np.float64)
+    n_accel = max(1, int(num_frames_total * accel_frac))
+    n_decel = max(1, int(num_frames_total * decel_frac))
+
+    if n_accel > 1:
+        t = np.linspace(0, 1, n_accel)
+        s[:n_accel] = 0.5 * (1.0 - np.cos(np.pi * t))
+
+    if n_decel > 1:
+        t = np.linspace(0, 1, n_decel)
+        s[-n_decel:] = 0.5 * (1.0 + np.cos(np.pi * t))
+
+    return s.astype(np.float32)
 
 
 def build_root2d_constraint(
@@ -15,140 +51,70 @@ def build_root2d_constraint(
     duration: float,
     fps: int = 30,
     heading: float = 0.0,
-    decel_frac: float = 0.15,
 ) -> dict:
-    """Convert a velocity command to a Root2D constraint dict.
+    """Build a Root2D constraint from a velocity command.
 
-    The path is built at constant velocity for the first ``1 - decel_frac``
-    of the duration, then smoothly eases to a stop over the remaining
-    ``decel_frac``.  This prevents the constraint-vs-diffusion conflict at
-    the tail that causes root jitter.
-
-    Args:
-        vel: {"vx": float, "vy": float, "wz": float}
-            vx = forward velocity (m/s)
-            vy = lateral velocity (m/s)
-            wz = angular velocity (rad/s)
-        duration: motion duration in seconds.
-        fps: frames per second.
-        heading: initial heading angle (radians, 0 = facing +z).
-        decel_frac: fraction of the duration used for deceleration (0 = none).
-
-    Returns:
-        Dict with "type", "frame_indices", "smooth_root_2d",
-        and optionally "global_root_heading".
+    The velocity profile is cosine-eased at both ends, then integrated
+    frame-by-frame to produce smooth (x,z) positions.  The path is built
+    for ``_PATH_STRETCH × duration`` but only the first ``duration``'s
+    worth of frames are constrained — the robot never reaches the
+    deceleration phase.
     """
-    num_frames = int(duration * fps)
+    num_frames_gen = int(duration * fps)
+    num_frames_path = int(duration * _PATH_STRETCH * fps)
     dt = 1.0 / fps
+
     vx = vel.get("vx", 0.0)
     vy = vel.get("vy", 0.0)
     wz = vel.get("wz", 0.0)
 
-    # Number of constant-velocity frames and deceleration frames
-    if decel_frac > 0 and num_frames > 5:
-        n_decel = max(1, int(num_frames * decel_frac))
-        n_const = num_frames - n_decel
-    else:
-        n_decel = 0
-        n_const = num_frames
+    speed = _speed_profile(num_frames_path)
 
-    t = np.arange(num_frames) * dt
-    t_const = t[:n_const]  # constant-velocity time
+    t = np.arange(num_frames_path, dtype=np.float64) * dt
 
-    # ── Build base positions (constant-velocity path) ──────────────
+    # ── Integrate speed profile over the STRETCHED path ─────────────
     if abs(wz) < 1e-6:
-        t_full = np.arange(n_const) * dt
-        x_base = vx * t_full
-        z_base = vy * t_full
-        headings_raw = None
+        # Straight: (x, z) = ∫ (vy*s, vx*s) dt
+        #   vy (lateral)  → Kimodo X
+        #   vx (forward)  → Kimodo Z
+        x_full = np.cumsum(vy * speed) * dt
+        z_full = np.cumsum(vx * speed) * dt
+        headings = None
     else:
-        t_full = np.arange(n_const) * dt
-        # Exact integration for circular arc
-        x_base = np.where(
-            abs(vx) > 1e-6,
-            (vx * np.sin(wz * t_full) + vy * (1 - np.cos(wz * t_full))) / wz,
-            vx * t_full,
-        )
-        z_base = np.where(
-            abs(vy) > 1e-6,
-            (vy * np.sin(wz * t_full) - vx * (1 - np.cos(wz * t_full))) / wz,
-            vy * t_full,
-        )
-        frame_headings = heading + wz * t_full
-        headings_raw = np.stack(
+        # Curved (circular arc).  Body-frame velocity (vx,vy) with
+        # rotation rate wz traces a circular arc in world coordinates.
+        # We integrate numerically to support the eased speed profile:
+        #
+        #   θ(t) = atan2(vy, vx) + wz·t
+        #   vx_world = vx·cos θ − vy·sin θ
+        #   vz_world = vx·sin θ + vy·cos θ
+        #   Kimodo X = ∫ lateral_world · speed  = ∫ vz_world · speed
+        #   Kimodo Z = ∫ forward_world · speed  = ∫ vx_world · speed
+        theta_0 = np.arctan2(vy, vx)
+        theta = theta_0 + wz * t
+
+        vx_world = vx * np.cos(theta) - vy * np.sin(theta)
+        vz_world = vx * np.sin(theta) + vy * np.cos(theta)
+
+        # Kimodo X = lateral component = vz_world
+        # Kimodo Z = forward component = vx_world
+        x_full = np.cumsum(vz_world * speed) * dt
+        z_full = np.cumsum(vx_world * speed) * dt
+
+        # Heading per frame (constrain only gen frames)
+        frame_headings = heading + wz * (np.arange(num_frames_gen) * dt)
+        headings = np.stack(
             [np.cos(frame_headings), np.sin(frame_headings)], axis=-1
-        )
+        ).astype(np.float32)
 
-    # ── Deceleration easing ────────────────────────────────────────
-    if n_decel > 0:
-        # End position of constant-velocity segment
-        x_end = float(x_base[-1]) if n_const > 0 else 0.0
-        z_end = float(z_base[-1]) if n_const > 0 else 0.0
-
-        # If the motion continued at constant speed, where would it end?
-        t_total = num_frames * dt
-        if abs(wz) < 1e-6:
-            x_final = vx * t_total
-            z_final = vy * t_total
-        else:
-            # position at total time (scalar)
-            x_final = (
-                (vx * np.sin(wz * t_total) + vy * (1 - np.cos(wz * t_total))) / wz
-            )
-            z_final = (
-                (vy * np.sin(wz * t_total) - vx * (1 - np.cos(wz * t_total))) / wz
-            )
-
-        # Build decel positions: linear interpolation between x_end and x_final,
-        # then apply ease-out warping so velocity goes to 0 smoothly.
-        frac = np.linspace(0.0, 1.0, n_decel + 1)[1:]  # (n_decel,)
-        ease = _ease_out_cosine(frac)
-
-        # The ease factor tells us how far along the "remaining path" we are.
-        # At frac=0 → ease=1 (full speed), at frac=1 → ease=0 (stopped).
-        # Position = final_pos - ease * remaining_distance
-        x_decel = x_final - ease * (x_final - x_end)
-        z_decel = z_final - ease * (z_final - z_end)
-
-        x = np.concatenate([x_base, x_decel])
-        z = np.concatenate([z_base, z_decel])
-
-        if headings_raw is not None:
-            # For turning: heading keeps rotating but at reduced rate in decel
-            heading_end_rad = heading + wz * t_total
-            # Ease the heading change rate
-            heading_decel_frac = _ease_out_cosine(
-                np.linspace(0, 1, n_decel + 1)[1:]
-            )
-            # Heading at each decel frame: interpolate angular position
-            heading_const_end = heading + wz * (n_const * dt)
-            # Eased heading: gradually stop rotating
-            heading_decel = heading_const_end + wz * dt * np.cumsum(heading_decel_frac)
-            all_headings_rad = np.concatenate([
-                heading + wz * t_const,
-                heading_decel,
-            ])
-            headings = np.stack(
-                [np.cos(all_headings_rad), np.sin(all_headings_rad)], axis=-1
-            )
-        else:
-            headings = None
-    else:
-        x = x_base
-        z = z_base
-        headings = headings_raw
-        if headings_raw is not None:
-            heading_arr = heading + wz * t
-            headings = np.stack(
-                [np.cos(heading_arr), np.sin(heading_arr)], axis=-1
-            )
-
-    smooth_root_2d = np.stack([x, z], axis=-1).tolist()
-    frame_indices = list(range(num_frames))
+    # ── Constrain only the generation-length prefix ──────────────────
+    smooth_root_2d = np.stack(
+        [x_full[:num_frames_gen], z_full[:num_frames_gen]], axis=-1
+    ).astype(np.float32).tolist()
 
     constraint = {
         "type": "root2d",
-        "frame_indices": frame_indices,
+        "frame_indices": list(range(num_frames_gen)),
         "smooth_root_2d": smooth_root_2d,
     }
 
@@ -159,18 +125,9 @@ def build_root2d_constraint(
 
 
 def build_constraints_json(sample: SampledMotion, fps: int = 30) -> list[dict]:
-    """Build the full constraints list for a sampled motion.
-
-    Args:
-        sample: SampledMotion with velocity parameters.
-        fps: Frames per second.
-
-    Returns:
-        List of constraint dicts (ready for JSON serialization).
-    """
+    """Build the full constraints list for a sampled motion."""
     constraints = []
 
-    # Add root2d constraint if we have velocity commands
     if sample.vel and any(abs(v) > 1e-6 for v in sample.vel.values()):
         root_constraint = build_root2d_constraint(
             sample.vel, sample.duration, fps=fps
@@ -183,11 +140,7 @@ def build_constraints_json(sample: SampledMotion, fps: int = 30) -> list[dict]:
 def build_sampled_constraints_list(
     samples: list[SampledMotion], fps: int = 30
 ) -> list[dict]:
-    """Build a constraint list from multiple sampled motions (one constraint per motion).
-
-    Each constraint will be cropped appropriately by Kimodo during multi-prompt generation.
-    For single-motion batches, just pass the constraint directly.
-    """
+    """Build a constraint list from multiple sampled motions."""
     all_constraints = []
     for sample in samples:
         constraints = build_constraints_json(sample, fps=fps)

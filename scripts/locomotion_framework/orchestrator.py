@@ -359,35 +359,43 @@ def _export_rltracker(
 ):
     """Export one motion in RLTracker dataset format.
 
-    Uses Kimodo FK + MujocoQposConverter to build the 7-key NPZ
-    (joint_pos, joint_vel, body_pos_w, body_quat_w,
-     body_lin_vel_w, body_ang_vel_w, fps).
+    Uses the model output (already contains posed_joints, global_rot_mats,
+    local_rot_mats, root_positions from complete_motion_dict) directly,
+    resampling to the RLTracker target FPS (50 Hz) to match the reference
+    dataset convention.
     """
     import numpy as np
     import torch
+    from kimodo.exports.motion_io import resample_motion_dict_to_kimodo_fps
 
-    # Run FK to get posed_joints + global_rot_mats
-    local_rot_mats_t = torch.from_numpy(
-        np.asarray(single["local_rot_mats"])
-    ).float().to(device)
-    root_positions_t = torch.from_numpy(
-        np.asarray(single["root_positions"])
-    ).float().to(device)
+    TARGET_FPS = 50.0
 
-    if local_rot_mats_t.dim() == 3:
-        local_rot_mats_t = local_rot_mats_t.unsqueeze(0)
-    if root_positions_t.dim() == 1:
-        root_positions_t = root_positions_t.unsqueeze(0)
+    # Convert to torch tensors on device
+    motion_dict = {
+        k: torch.from_numpy(np.asarray(v)).float().to(device)
+        for k, v in single.items()
+        if k in ("local_rot_mats", "root_positions", "posed_joints",
+                  "global_rot_mats", "foot_contacts", "smooth_root_pos",
+                  "global_root_heading")
+    }
 
-    global_rot_mats, posed_joints, _ = model.skeleton.fk(
-        local_rot_mats_t, root_positions_t
-    )
+    # Resample from generation FPS to target FPS if needed
+    if abs(float(fps) - TARGET_FPS) > 0.5:
+        motion_dict, _did_resample = resample_motion_dict_to_kimodo_fps(
+            motion_dict, model.skeleton, float(fps), TARGET_FPS
+        )
+        out_fps = TARGET_FPS
+    else:
+        out_fps = float(fps)
 
-    # Convert to numpy
-    posed_joints_np = posed_joints.squeeze(0).cpu().numpy().astype(np.float32)
-    global_rot_mats_np = global_rot_mats.squeeze(0).cpu().numpy().astype(np.float32)
-    local_rot_mats_np = local_rot_mats_t.squeeze(0).cpu().numpy().astype(np.float32)
-    root_positions_np = root_positions_t.squeeze(0).cpu().numpy().astype(np.float32)
+    # Convert back to numpy
+    def _to_np(t):
+        return t.detach().cpu().numpy().astype(np.float32)
+
+    posed_joints_np = _to_np(motion_dict["posed_joints"])
+    global_rot_mats_np = _to_np(motion_dict["global_rot_mats"])
+    local_rot_mats_np = _to_np(motion_dict["local_rot_mats"])
+    root_positions_np = _to_np(motion_dict["root_positions"])
 
     from .export_presets import get_preset
     exporter = get_preset("rltracker")
@@ -396,7 +404,7 @@ def _export_rltracker(
         global_rot_mats=global_rot_mats_np,
         local_rot_mats=local_rot_mats_np,
         root_positions=root_positions_np,
-        fps=float(fps),
+        fps=float(out_fps),
         sample_idx=sample_idx,
         motion_type=sample.motion_type,
         vel=sample.vel,

@@ -8,10 +8,10 @@ matching the structure of:
         motion.npz
 
 The target NPZ has 7 keys (all float32):
-    fps               (1,)       – frames per second
-    joint_pos         (T, 29)    – 29 hinge joint angles (radians)
+    fps               (1,)       – frames per second  (50 Hz)
+    joint_pos         (T, 29)    – 29 hinge joint angles in ISAACLAB DOF order
     joint_vel         (T, 29)    – joint angular velocities
-    body_pos_w        (T, 30, 3) – 30 body world positions (m, MuJoCo: z-up x-fwd)
+    body_pos_w        (T, 30, 3) – 30 body world positions in ISAACLAB body order
     body_quat_w       (T, 30, 4) – 30 body world quaternions (w,x,y,z)
     body_lin_vel_w    (T, 30, 3) – body linear velocities
     body_ang_vel_w    (T, 30, 3) – body angular velocities
@@ -31,25 +31,130 @@ from . import register, ExportPreset
 _KIMODO_TO_MUJOCO = np.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]], dtype=np.float32)
 _MUJOCO_TO_KIMODO = _KIMODO_TO_MUJOCO.T  # inverse
 
+# ---------------------------------------------------------------------------
+# Joint / body name tables and reordering permutations
+#
+# Kimodo's MujocoQposConverter uses the G1 MuJoCo XML, which orders joints
+# and bodies in **document order**.  The RLTracker reference dataset uses
+# **Isaac Lab order** (alphabetical from the URDF, left/right interleaved).
+#
+# We build in MuJoCo order first, then permute both joint_pos and body
+# arrays to Isaac Lab order.
+# ---------------------------------------------------------------------------
+
+MUJOCO_DOF_NAMES = [
+    "left_hip_pitch_joint",   "left_hip_roll_joint",   "left_hip_yaw_joint",
+    "left_knee_joint",        "left_ankle_pitch_joint","left_ankle_roll_joint",
+    "right_hip_pitch_joint",  "right_hip_roll_joint",  "right_hip_yaw_joint",
+    "right_knee_joint",       "right_ankle_pitch_joint","right_ankle_roll_joint",
+    "waist_yaw_joint",        "waist_roll_joint",       "waist_pitch_joint",
+    "left_shoulder_pitch_joint","left_shoulder_roll_joint","left_shoulder_yaw_joint",
+    "left_elbow_joint",       "left_wrist_roll_joint",  "left_wrist_pitch_joint",
+    "left_wrist_yaw_joint",
+    "right_shoulder_pitch_joint","right_shoulder_roll_joint","right_shoulder_yaw_joint",
+    "right_elbow_joint",      "right_wrist_roll_joint", "right_wrist_pitch_joint",
+    "right_wrist_yaw_joint",
+]
+
+ISAACLAB_DOF_NAMES = [
+    "left_hip_pitch_joint",  "right_hip_pitch_joint",  "waist_yaw_joint",
+    "left_hip_roll_joint",   "right_hip_roll_joint",   "waist_roll_joint",
+    "left_hip_yaw_joint",    "right_hip_yaw_joint",    "waist_pitch_joint",
+    "left_knee_joint",       "right_knee_joint",
+    "left_shoulder_pitch_joint", "right_shoulder_pitch_joint",
+    "left_ankle_pitch_joint","right_ankle_pitch_joint",
+    "left_shoulder_roll_joint",  "right_shoulder_roll_joint",
+    "left_ankle_roll_joint", "right_ankle_roll_joint",
+    "left_shoulder_yaw_joint","right_shoulder_yaw_joint",
+    "left_elbow_joint",      "right_elbow_joint",
+    "left_wrist_roll_joint", "right_wrist_roll_joint",
+    "left_wrist_pitch_joint","right_wrist_pitch_joint",
+    "left_wrist_yaw_joint",  "right_wrist_yaw_joint",
+]
+
+# Permutation:  joint_pos_il = joint_pos_mj[:, _MJ_DOF_TO_IL]
+# _MJ_DOF_TO_IL[i] = MuJoCo index of the joint that goes to IsaacLab position i
+_MJ_DOF_TO_IL: list[int] = [MUJOCO_DOF_NAMES.index(name) for name in ISAACLAB_DOF_NAMES]
+
+# MuJoCo XML document-order body names (same order as worldbody children)
+MUJOCO_BODY_NAMES = [
+    "pelvis",
+    "left_hip_pitch_link",  "left_hip_roll_link",  "left_hip_yaw_link",
+    "left_knee_link",       "left_ankle_pitch_link","left_ankle_roll_link",
+    "right_hip_pitch_link", "right_hip_roll_link",  "right_hip_yaw_link",
+    "right_knee_link",      "right_ankle_pitch_link","right_ankle_roll_link",
+    "waist_yaw_link",       "waist_roll_link",       "torso_link",
+    "left_shoulder_pitch_link","left_shoulder_roll_link","left_shoulder_yaw_link",
+    "left_elbow_link",       "left_wrist_roll_link",  "left_wrist_pitch_link",
+    "left_wrist_yaw_link",
+    "right_shoulder_pitch_link","right_shoulder_roll_link","right_shoulder_yaw_link",
+    "right_elbow_link",      "right_wrist_roll_link", "right_wrist_pitch_link",
+    "right_wrist_yaw_link",
+]
+
+ISAACLAB_BODY_NAMES = [
+    "pelvis",
+    "left_hip_pitch_link",  "right_hip_pitch_link",
+    "waist_yaw_link",
+    "left_hip_roll_link",   "right_hip_roll_link",
+    "waist_roll_link",
+    "left_hip_yaw_link",    "right_hip_yaw_link",
+    "torso_link",
+    "left_knee_link",       "right_knee_link",
+    "left_shoulder_pitch_link", "right_shoulder_pitch_link",
+    "left_ankle_pitch_link","right_ankle_pitch_link",
+    "left_shoulder_roll_link",  "right_shoulder_roll_link",
+    "left_ankle_roll_link", "right_ankle_roll_link",
+    "left_shoulder_yaw_link","right_shoulder_yaw_link",
+    "left_elbow_link",      "right_elbow_link",
+    "left_wrist_roll_link", "right_wrist_roll_link",
+    "left_wrist_pitch_link","right_wrist_pitch_link",
+    "left_wrist_yaw_link",  "right_wrist_yaw_link",
+]
+
+# Permutation:  body_xxx_il = body_xxx_mj[:, _MJ_BODY_TO_IL, ...]
+# _MJ_BODY_TO_IL[i] = MuJoCo body index for the IsaacLab body at position i
+_MJ_BODY_TO_IL: list[int] = [MUJOCO_BODY_NAMES.index(name) for name in ISAACLAB_BODY_NAMES]
+
+N_BODIES = 30
+N_DOFS = 29
+
 
 # ---------------------------------------------------------------------------
 # Naming helpers
 # ---------------------------------------------------------------------------
 
 def _compute_trajectory_type(vel: dict[str, float]) -> str:
-    """Classify trajectory from velocity command."""
-    vx = abs(vel.get("vx", 0.0))
-    vy = abs(vel.get("vy", 0.0))
-    wz = abs(vel.get("wz", 0.0))
+    """Classify trajectory from velocity command.
 
-    if max(vx, vy, wz) < 0.03:
+    Rules (evaluated in order):
+        still  – all velocity components are negligible
+        turn   – in-place rotation (|wz| dominates, translation near zero)
+        lat    – primarily sideways
+        bwd    – primarily backward
+        fwd    – everything else (including forward with incidental turning)
+    """
+    vx = vel.get("vx", 0.0)
+    vy = vel.get("vy", 0.0)
+    wz = abs(vel.get("wz", 0.0))
+    speed = np.sqrt(vx ** 2 + vy ** 2)
+
+    if max(speed, wz) < 0.03:
         return "still"
-    if wz > 0.15 and wz > max(vx, vy) * 1.5:
+
+    # Only "turn" when the robot rotates while barely translating
+    # → angular velocity is high AND translational speed is low
+    if wz > 0.20 and speed < 0.15:
         return "turn"
-    if vy > vx * 1.2 and vy > 0.05:
+
+    # Lateral when sideways velocity is the dominant translation component
+    if abs(vy) > abs(vx) * 0.8 and abs(vy) > 0.05:
         return "lat"
-    if vel.get("vx", 0) < -0.05:
+
+    # Backward (vx is negative and dominates vy)
+    if vx < -0.05 and abs(vx) >= abs(vy):
         return "bwd"
+
     return "fwd"
 
 
@@ -88,7 +193,6 @@ def build_motion_name(
 
     Returns a name like ``walk_fwd_000_norm_0001__K42``.
     """
-    # Map internal type names to RLTracker abbreviations
     type_map = {
         "walk": "walk",
         "run": "run",
@@ -105,121 +209,109 @@ def build_motion_name(
 
 
 # ---------------------------------------------------------------------------
-# Quaternion helpers
+# Quaternion / rotation helpers
 # ---------------------------------------------------------------------------
 
-def _mat_to_quat_wxyz(rot_mats: np.ndarray) -> np.ndarray:
+def _mat_to_quat_wxyz(R: np.ndarray) -> np.ndarray:
     """Convert rotation matrices (..., 3, 3) to quaternions (..., 4) w,x,y,z.
 
-    Uses the standard algorithm that avoids division-by-zero for near-zero
-    trace.
+    Numerically stable Shepperd method.
     """
-    shape = rot_mats.shape[:-2]
-    r = rot_mats.reshape(-1, 3, 3)
-    n = r.shape[0]
+    *batch, _, _ = R.shape
+    trace = R[..., 0, 0] + R[..., 1, 1] + R[..., 2, 2]
 
-    q = np.zeros((n, 4), dtype=np.float32)
-
-    trace = r[:, 0, 0] + r[:, 1, 1] + r[:, 2, 2]
+    qw = np.zeros(batch, dtype=np.float32)
+    qx = np.zeros_like(qw)
+    qy = np.zeros_like(qw)
+    qz = np.zeros_like(qw)
 
     # Case 1: trace > 0
-    mask0 = trace > 0.0
-    if mask0.any():
-        s = 0.5 / np.sqrt(trace[mask0] + 1.0)
-        q[mask0, 0] = 0.25 / s
-        q[mask0, 1] = (r[mask0, 2, 1] - r[mask0, 1, 2]) * s
-        q[mask0, 2] = (r[mask0, 0, 2] - r[mask0, 2, 0]) * s
-        q[mask0, 3] = (r[mask0, 1, 0] - r[mask0, 0, 1]) * s
+    c1 = trace > 0
+    s1 = np.sqrt(np.maximum(trace[c1] + 1.0, 0.0)) * 2.0
+    qw[c1] = 0.25 * s1
+    qx[c1] = (R[..., 2, 1][c1] - R[..., 1, 2][c1]) / s1
+    qy[c1] = (R[..., 0, 2][c1] - R[..., 2, 0][c1]) / s1
+    qz[c1] = (R[..., 1, 0][c1] - R[..., 0, 1][c1]) / s1
 
-    # Case 2: r00 is max diagonal
-    mask1 = ~mask0 & (r[:, 0, 0] >= r[:, 1, 1]) & (r[:, 0, 0] >= r[:, 2, 2])
-    if mask1.any():
-        s = 2.0 * np.sqrt(
-            np.maximum(
-                1.0 + r[mask1, 0, 0] - r[mask1, 1, 1] - r[mask1, 2, 2], 0.0
-            )
-        )
-        q[mask1, 1] = 0.25 * s
-        q[mask1, 0] = (r[mask1, 2, 1] - r[mask1, 1, 2]) / s
-        q[mask1, 2] = (r[mask1, 0, 1] + r[mask1, 1, 0]) / s
-        q[mask1, 3] = (r[mask1, 0, 2] + r[mask1, 2, 0]) / s
+    # Case 2: R[0,0] > R[1,1], R[0,0] > R[2,2]
+    c2 = ~c1 & (R[..., 0, 0] > R[..., 1, 1]) & (R[..., 0, 0] > R[..., 2, 2])
+    s2 = np.sqrt(np.maximum(1.0 + R[..., 0, 0][c2] - R[..., 1, 1][c2] - R[..., 2, 2][c2], 0.0)) * 2.0
+    qx[c2] = 0.25 * s2
+    qw[c2] = (R[..., 2, 1][c2] - R[..., 1, 2][c2]) / s2
+    qy[c2] = (R[..., 0, 1][c2] + R[..., 1, 0][c2]) / s2
+    qz[c2] = (R[..., 0, 2][c2] + R[..., 2, 0][c2]) / s2
 
-    # Case 3: r11 is max diagonal
-    mask2 = ~mask0 & ~mask1 & (r[:, 1, 1] >= r[:, 2, 2])
-    if mask2.any():
-        s = 2.0 * np.sqrt(
-            np.maximum(
-                1.0 + r[mask2, 1, 1] - r[mask2, 0, 0] - r[mask2, 2, 2], 0.0
-            )
-        )
-        q[mask2, 2] = 0.25 * s
-        q[mask2, 0] = (r[mask2, 0, 2] - r[mask2, 2, 0]) / s
-        q[mask2, 1] = (r[mask2, 0, 1] + r[mask2, 1, 0]) / s
-        q[mask2, 3] = (r[mask2, 1, 2] + r[mask2, 2, 1]) / s
+    # Case 3: R[1,1] > R[2,2]
+    c3 = ~c1 & ~c2 & (R[..., 1, 1] > R[..., 2, 2])
+    s3 = np.sqrt(np.maximum(1.0 + R[..., 1, 1][c3] - R[..., 0, 0][c3] - R[..., 2, 2][c3], 0.0)) * 2.0
+    qy[c3] = 0.25 * s3
+    qw[c3] = (R[..., 0, 2][c3] - R[..., 2, 0][c3]) / s3
+    qx[c3] = (R[..., 0, 1][c3] + R[..., 1, 0][c3]) / s3
+    qz[c3] = (R[..., 1, 2][c3] + R[..., 2, 1][c3]) / s3
 
-    # Case 4: r22 is max diagonal
-    mask3 = ~mask0 & ~mask1 & ~mask2
-    if mask3.any():
-        s = 2.0 * np.sqrt(
-            np.maximum(
-                1.0 + r[mask3, 2, 2] - r[mask3, 0, 0] - r[mask3, 1, 1], 0.0
-            )
-        )
-        q[mask3, 3] = 0.25 * s
-        q[mask3, 0] = (r[mask3, 1, 0] - r[mask3, 0, 1]) / s
-        q[mask3, 1] = (r[mask3, 0, 2] + r[mask3, 2, 0]) / s
-        q[mask3, 2] = (r[mask3, 1, 2] + r[mask3, 2, 1]) / s
+    # Case 4: default
+    c4 = ~c1 & ~c2 & ~c3
+    s4 = np.sqrt(np.maximum(1.0 + R[..., 2, 2][c4] - R[..., 0, 0][c4] - R[..., 1, 1][c4], 0.0)) * 2.0
+    qz[c4] = 0.25 * s4
+    qw[c4] = (R[..., 1, 0][c4] - R[..., 0, 1][c4]) / s4
+    qx[c4] = (R[..., 0, 2][c4] + R[..., 2, 0][c4]) / s4
+    qy[c4] = (R[..., 1, 2][c4] + R[..., 2, 1][c4]) / s4
 
-    # Normalize
+    q = np.stack([qw, qx, qy, qz], axis=-1)
     norms = np.linalg.norm(q, axis=-1, keepdims=True)
     q = q / np.maximum(norms, 1e-12)
+    return q
 
-    return q.reshape(*shape, 4)
 
+def _quat_angular_velocity(quats: np.ndarray, dt: float) -> np.ndarray:
+    """Compute per-body angular velocity from quaternion sequence.
 
-def _quat_angular_velocity(
-    quats: np.ndarray, dt: float
-) -> np.ndarray:
-    """Compute angular velocity from a sequence of quaternions (T, N, 4) wxyz.
+    Uses central-difference SO(3) derivative:  ω = log(R_rel) / (2*dt)
+    where R_rel = R(t+1) * R(t-1)^T, matching the reference converter.
 
-    Uses finite-difference of the quaternion derivative:
-        omega = 2 * dq/dt * q^{-1}
-    taking the vector part.
+    Args:
+        quats:  [T, N, 4]  wxyz body quaternions in world frame.
+        dt:     Time step in seconds.
+
+    Returns:
+        [T, N, 3] angular velocities in world frame (rad/s).
     """
     T = quats.shape[0]
-    if T < 2:
-        return np.zeros_like(quats[..., :3])
+    if T < 3:
+        return np.zeros((T, quats.shape[1], 3), dtype=np.float32)
 
-    # q(t+1) * q(t)^-1  where q^-1 = (w, -x, -y, -z) for unit quaternions
-    q_next = quats[1:]   # (T-1, N, 4)
-    q_curr = quats[:-1]  # (T-1, N, 4)
-    q_curr_inv = q_curr.copy()
-    q_curr_inv[..., 1:] *= -1.0
+    # Central differences on SO(3):  q_rel = q(t+1) * q(t-1)^-1
+    q_prev = quats[:-2]  # [T-2, N, 4]
+    q_next = quats[2:]   # [T-2, N, 4]
 
-    # Quaternion multiply: q_next * q_curr^{-1}
-    w0, x0, y0, z0 = (
-        q_next[..., 0], q_next[..., 1], q_next[..., 2], q_next[..., 3]
-    )
-    w1, x1, y1, z1 = (
-        q_curr_inv[..., 0],
-        q_curr_inv[..., 1],
-        q_curr_inv[..., 2],
-        q_curr_inv[..., 3],
-    )
-    dq_w = w0 * w1 - x0 * x1 - y0 * y1 - z0 * z1
-    dq_x = w0 * x1 + x0 * w1 + y0 * z1 - z0 * y1
-    dq_y = w0 * y1 - x0 * z1 + y0 * w1 + z0 * x1
-    dq_z = w0 * z1 + x0 * y1 - y0 * x1 + z0 * w1
+    # Conjugate: q^-1 = (w, -x, -y, -z)
+    q_prev_inv = q_prev.copy()
+    q_prev_inv[..., 1:] *= -1.0
 
-    # omega = (2/dt) * vector_part(dq), scaled by sign of scalar part
-    sign = np.sign(dq_w)[..., None]
-    omega = (2.0 / dt) * sign * np.stack([dq_x, dq_y, dq_z], axis=-1)
+    # Multiply: q_rel = q_next * q_prev^-1
+    w0, x0, y0, z0 = q_next[..., 0], q_next[..., 1], q_next[..., 2], q_next[..., 3]
+    w1, x1, y1, z1 = q_prev_inv[..., 0], q_prev_inv[..., 1], q_prev_inv[..., 2], q_prev_inv[..., 3]
+    q_rel_w = w0*w1 - x0*x1 - y0*y1 - z0*z1
+    q_rel_x = w0*x1 + x0*w1 + y0*z1 - z0*y1
+    q_rel_y = w0*y1 - x0*z1 + y0*w1 + z0*x1
+    q_rel_z = w0*z1 + x0*y1 - y0*x1 + z0*w1
 
-    # Duplicate first/last frame for same-length output
-    result = np.zeros_like(quats[..., :3])
+    # axis-angle:  θ = 2*acos(|w|),  axis = vec / |vec|
+    # ω = axis * θ / (2*dt)
+    # Short arc: ensure w >= 0
+    sign = np.sign(q_rel_w)
+    q_rel_w_abs = np.abs(q_rel_w)
+    n = np.sqrt(np.maximum(q_rel_x**2 + q_rel_y**2 + q_rel_z**2, 1e-12))
+    theta = 2.0 * np.arctan2(n, q_rel_w_abs)
+    omega = (theta / (2.0 * dt))[..., None] * np.stack([
+        sign * q_rel_x / n, sign * q_rel_y / n, sign * q_rel_z / n
+    ], axis=-1)
+
+    # Pad to full T
+    result = np.zeros((T, quats.shape[1], 3), dtype=np.float32)
     result[0] = omega[0]
     result[-1] = omega[-1]
-    result[1:-1] = 0.5 * (omega[:-1] + omega[1:])
+    result[1:-1] = omega
 
     return result
 
@@ -228,9 +320,55 @@ def _quat_angular_velocity(
 # Exporter
 # ---------------------------------------------------------------------------
 
+
+def _sanitize_dict(rl_dict: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    """Replace NaN/Inf in output arrays with safe fallback values.
+
+    NaN can appear in wrist-joint angles and their derived FK positions
+    when rotation matrices hit degenerate cases during resampling or
+    joint-angle extraction.  We fill NaN with 0 (joints/velocities),
+    identity quaternion, or nearest-valid-frame (body positions).
+    """
+    for key in list(rl_dict.keys()):
+        arr = rl_dict[key]
+        if not np.isnan(arr).any() and not np.isinf(arr).any():
+            continue
+
+        if key == "fps":
+            continue
+
+        if key in ("joint_pos", "joint_vel"):
+            arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+        elif key == "body_quat_w":
+            nan_mask = np.isnan(arr).any(axis=-1) | np.isinf(arr).any(axis=-1)
+            arr[nan_mask] = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+            zero_mask = np.abs(arr).sum(axis=-1) < 1e-8
+            arr[zero_mask] = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+        elif key in ("body_pos_w", "body_lin_vel_w", "body_ang_vel_w"):
+            arr = arr.copy()
+            T = arr.shape[0]
+            for t in range(T):
+                frame_mask = (
+                    np.isnan(arr[t]).any(axis=-1) | np.isinf(arr[t]).any(axis=-1)
+                )
+                if frame_mask.any():
+                    arr[t, frame_mask] = (
+                        arr[t - 1, frame_mask] if t > 0 else 0.0
+                    )
+
+        rl_dict[key] = arr.astype(np.float32)
+
+    return rl_dict
+
+
 @register("rltracker")
 class RLTrackerExporter:
-    """Export Kimodo-generated motions in RLTracker dataset format."""
+    """Export Kimodo-generated motions in RLTracker dataset format.
+
+    Converts Kimodo FK output (y-up, z-forward, 34 joints) to the
+    RLTracker dataset convention (z-up, x-forward, 30 bodies, 29 DOFs,
+    IsaacLab ordering).
+    """
 
     name = "rltracker"
     description = (
@@ -254,7 +392,7 @@ class RLTrackerExporter:
 
     def _kimodo_output_to_rltracker(
         self,
-        posed_joints: np.ndarray,       # (T, 34, 3)
+        posed_joints: np.ndarray,       # (T, 34, 3)  Kimodo world-frame joint positions
         global_rot_mats: np.ndarray,    # (T, 34, 3, 3)
         local_rot_mats: np.ndarray,     # (T, 34, 3, 3)
         root_positions: np.ndarray,     # (T, 3)
@@ -268,67 +406,77 @@ class RLTrackerExporter:
         T = posed_joints.shape[0]
         dt = 1.0 / fps
 
-        # -- joint_pos: 29 hinge angles via MujocoQposConverter ----------
+        # ── joint_pos: 29 hinge angles via MujocoQposConverter ──
+        # to_qpos with mujoco_rest_zero=False gives raw joint DOFs (Euler extraction,
+        # numerically stable). We then manually subtract the rest DOFs to get
+        # T-pose-relative angles, avoiding the axis-angle NaN path that
+        # mujoco_rest_zero=True triggers for certain wrist rotations.
         local_t = torch.from_numpy(local_rot_mats).unsqueeze(0)  # (1, T, 34, 3, 3)
         root_t = torch.from_numpy(root_positions).unsqueeze(0)    # (1, T, 3)
-        qpos = converter.to_qpos(local_t, root_t, root_quat_w_first=True)
+        qpos = converter.to_qpos(
+            local_t, root_t, root_quat_w_first=True, mujoco_rest_zero=False
+        )
         qpos_np = qpos.squeeze(0).cpu().numpy()  # (T, 36)
-        joint_pos = qpos_np[:, 7:].astype(np.float32)  # (T, 29)
 
-        # -- joint_vel: finite differences ---------------------------------
+        # Columns 7:36 = 29 hinge angles in MJ order
+        joint_dofs_raw = qpos_np[:, 7:].astype(np.float32)  # (T, 29)
+
+        # Subtract rest DOFs manually (stable Euler path, same values but no NaN)
+        rest_dofs = converter._rest_dofs.cpu().numpy().astype(np.float32)  # (29,)
+        joint_pos_mj = joint_dofs_raw - rest_dofs[np.newaxis, :]  # (T, 29) MJ order
+
+        # Permute to IsaacLab order
+        joint_pos = joint_pos_mj[:, _MJ_DOF_TO_IL]             # (T, 29) IL order
+
+        # ── joint_vel: finite differences ──
         joint_vel = np.gradient(joint_pos, axis=0) / dt
         joint_vel = joint_vel.astype(np.float32)
 
-        # -- body_pos_w: map 34 Kimodo joints → 30 MuJoCo bodies ----------
-        # Converter mapping arrays (numpy copies)
-        kim_to_mj = (
-            converter._kimodo_indices_to_mujoco_indices.cpu().numpy()
-        )  # (34,)  mujoco body index or -1
-        mj_to_kim = (
-            converter._mujoco_indices_to_kimodo_indices.cpu().numpy()
-        )  # (29,)  kimodo joint index for each hinge
+        # ── Kimodo → MuJooco coordinate transform ──
+        # mj_to_kim[i] = kimodo_joint_idx for MuJoCo hinge i (bodies i+1)
+        mj_to_kim = converter._mujoco_indices_to_kimodo_indices.cpu().numpy()  # (29,)
 
-        body_pos_w = np.zeros((T, 30, 3), dtype=np.float32)
+        # posed_joints in MuJoCo space:  (T, 34, 3)
+        posed_mj = posed_joints @ _MUJOCO_TO_KIMODO.T
 
-        # Body 0 = pelvis (root)
-        body_pos_w[:, 0, :] = root_positions @ _MUJOCO_TO_KIMODO.T
-        # Alternative: use qpos root translation directly
-        # qpos_np[:, :3] is root in Mujoco space — use this instead since it's already correct
-        body_pos_w[:, 0, :] = qpos_np[:, :3].astype(np.float32)
+        # ── body_pos_w in MuJoCo body order ──
+        body_pos_mj = np.zeros((T, N_BODIES, 3), dtype=np.float32)
 
-        # Bodies 1..29 = hinge joints
-        # posed_joints is in Kimodo space; transform to MuJoCo space
-        posed_mj = posed_joints @ _MUJOCO_TO_KIMODO.T  # (T, 34, 3)
-        for mj_hinge_idx, kim_joint_idx in enumerate(mj_to_kim):
-            if kim_joint_idx >= 0:
-                body_pos_w[:, mj_hinge_idx + 1, :] = posed_mj[:, int(kim_joint_idx), :]
+        # Body 0 = pelvis (root) — use qpos translation (already in MuJoCo space)
+        body_pos_mj[:, 0, :] = qpos_np[:, :3].astype(np.float32)
 
-        # -- body_quat_w: global rotations → MuJoCo space → quaternion -----
+        # Bodies 1..29 — hinge joints: body = hinge_idx + 1
+        for hinge_idx, kimodo_joint_idx in enumerate(mj_to_kim):
+            if kimodo_joint_idx >= 0:
+                body_pos_mj[:, hinge_idx + 1, :] = posed_mj[:, int(kimodo_joint_idx), :]
+
+        # Permute to IsaacLab body order
+        body_pos_w = body_pos_mj[:, _MJ_BODY_TO_IL, :]
+
+        # ── body_quat_w in MuJoCo body order ──
         # R_mujoco = kimodo_to_mujoco @ R_kimodo @ mujoco_to_kimodo
-        body_quat_w = np.zeros((T, 30, 4), dtype=np.float32)
+        body_quat_mj = np.zeros((T, N_BODIES, 4), dtype=np.float32)
 
-        # Root quaternion (from qpos for accuracy)
-        body_quat_w[:, 0, :] = qpos_np[:, 3:7].astype(np.float32)  # (w,x,y,z)
+        # Root quaternion from qpos
+        body_quat_mj[:, 0, :] = qpos_np[:, 3:7].astype(np.float32)
 
-        # Hinge joint bodies
-        for mj_hinge_idx, kim_joint_idx in enumerate(mj_to_kim):
-            if kim_joint_idx < 0:
-                continue
-            Rk = global_rot_mats[:, int(kim_joint_idx), :, :]  # (T, 3, 3)
-            # Transform to MuJoCo space
-            Rm = _KIMODO_TO_MUJOCO @ Rk @ _MUJOCO_TO_KIMODO  # (T, 3, 3)
-            q = _mat_to_quat_wxyz(Rm)  # (T, 4) w,x,y,z
-            body_quat_w[:, mj_hinge_idx + 1, :] = q
+        for hinge_idx, kimodo_joint_idx in enumerate(mj_to_kim):
+            if kimodo_joint_idx >= 0:
+                Rk = global_rot_mats[:, int(kimodo_joint_idx), :, :]
+                Rm = _KIMODO_TO_MUJOCO @ Rk @ _MUJOCO_TO_KIMODO
+                body_quat_mj[:, hinge_idx + 1, :] = _mat_to_quat_wxyz(Rm)
 
-        # Normalize quaternions
-        norms = np.linalg.norm(body_quat_w, axis=-1, keepdims=True)
-        body_quat_w = body_quat_w / np.maximum(norms, 1e-12)
+        norms = np.linalg.norm(body_quat_mj, axis=-1, keepdims=True)
+        body_quat_mj = body_quat_mj / np.maximum(norms, 1e-12)
 
-        # -- body_lin_vel_w: finite differences of body_pos_w --------------
+        # Permute to IsaacLab body order
+        body_quat_w = body_quat_mj[:, _MJ_BODY_TO_IL, :]
+
+        # ── body_lin_vel_w ──
         body_lin_vel_w = np.gradient(body_pos_w, axis=0) / dt
         body_lin_vel_w = body_lin_vel_w.astype(np.float32)
 
-        # -- body_ang_vel_w: from quaternion changes ----------------------
+        # ── body_ang_vel_w (SO(3) central differences) ──
         body_ang_vel_w = _quat_angular_velocity(body_quat_w, dt).astype(np.float32)
 
         return {
@@ -372,6 +520,9 @@ class RLTrackerExporter:
             root_positions=root_positions,
             fps=fps,
         )
+
+        # Sanitize: replace NaN/Inf with safe values
+        rl_dict = _sanitize_dict(rl_dict)
 
         np.savez_compressed(str(out_dir / "motion.npz"), **rl_dict)
 

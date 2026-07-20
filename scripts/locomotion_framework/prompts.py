@@ -34,9 +34,9 @@ def _speed_hint(vel: Optional[dict[str, float]] = None) -> str:
     elif vx < 0.7:
         return ""
     elif vx < 1.5:
-        return "quickly"
+        return "at a brisk pace"
     else:
-        return "running fast"
+        return "at high speed"
 
 
 def build_motion_prompt(

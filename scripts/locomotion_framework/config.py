@@ -44,6 +44,8 @@ class GlobalConfig:
     output_dir: str = "outputs/locomotion"
     gpu: int = 0
     fps: int = 30
+    sampling_method: str = "uniform"  # "uniform" or "lhs"
+    export_preset: str = "kimodo"     # "kimodo" (default NPZ+CSV) or "rltracker"
 
 
 @dataclass
@@ -82,6 +84,8 @@ def load_config(path: str | Path) -> LocomotionConfig:
         output_dir=global_raw.get("output_dir", "outputs/locomotion"),
         gpu=global_raw.get("gpu", 0),
         fps=global_raw.get("fps", 30),
+        sampling_method=global_raw.get("sampling_method", "uniform"),
+        export_preset=global_raw.get("export_preset", "kimodo"),
     )
 
     motion_types = {}

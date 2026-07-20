@@ -30,6 +30,9 @@ from .config import LocomotionConfig, MotionSpec, VelRange, load_config
 from .sampler import MotionSampler, SampledMotion
 from .constraints import build_constraints_json
 
+# Import export preset registry (populates _registry)
+from .export_presets import get_preset, list_presets  # noqa: E402
+
 
 # ── output helpers ───────────────────────────────────────────────
 
@@ -57,7 +60,8 @@ def _save_metadata(out_dir: Path, samples: list[SampledMotion]) -> None:
         json.dump(metadata, f, indent=2)
 
 
-def _save_manifest(csv_path: Path, all_samples: list[SampledMotion]) -> None:
+def _save_manifest(csv_path: Path, all_samples: list[SampledMotion],
+                   preset: str = "kimodo", seed: int = 0) -> None:
     """Save a manifest CSV with one row per generated motion."""
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     with open(csv_path, "w", newline="") as f:
@@ -65,9 +69,15 @@ def _save_manifest(csv_path: Path, all_samples: list[SampledMotion]) -> None:
         writer.writerow([
             "index", "motion_type", "prompt", "duration_s",
             "vx", "vy", "wz", "torso_height", "style",
-            "npz_path", "csv_path",
+            "path",
         ])
         for i, s in enumerate(all_samples):
+            if preset == "rltracker":
+                from .export_presets.rltracker import build_motion_name
+                name = build_motion_name(s.motion_type, s.vel, i, seed)
+                path_str = f"{name}/motion.npz"
+            else:
+                path_str = f"{s.motion_type}/{s.motion_type}_{i:04d}.npz"
             writer.writerow([
                 i,
                 s.motion_type,
@@ -78,8 +88,7 @@ def _save_manifest(csv_path: Path, all_samples: list[SampledMotion]) -> None:
                 round(s.vel.get("wz", 0), 4),
                 round(s.torso_height, 3),
                 s.style,
-                f"{s.motion_type}/{s.motion_type}_{i:04d}.npz",
-                f"{s.motion_type}/{s.motion_type}_{i:04d}.csv",
+                path_str,
             ])
     print(f"Manifest saved: {csv_path} ({len(all_samples)} rows)")
 
@@ -92,6 +101,7 @@ def run_generation(
     output_base: Path,
     dry_run: bool = False,
     gpu: int = 0,
+    preset: str = "kimodo",
 ):
     """Run the full locomotion batch generation pipeline.
 
@@ -100,21 +110,39 @@ def run_generation(
         output_base: Base directory for outputs.
         dry_run: If True, only print what would be generated.
         gpu: CUDA device index.
+        preset: Export preset name ("kimodo" or "rltracker").
     """
     device = f"cuda:{gpu}"
     sampler = MotionSampler(config, seed=config.global_.seed)
 
     # Generate batch specs
-    batch_specs = sampler.generate_batch_specs()
+    method = config.global_.sampling_method
+    batch_specs = sampler.generate_batch_specs(method=method)
     total_motions = sum(len(s) for s in batch_specs.values())
     print(f"=== Locomotion Batch Generation ===")
-    print(f"Model: {config.global_.model}")
+    print(f"Model: {config.global_.model} | Sampling: {method} | Preset: {preset}")
     print(f"Types: {len(batch_specs)} | Total motions: {total_motions}")
     print(f"Output: {output_base.resolve()}")
     if dry_run:
         print("DRY RUN — sampling only\n")
     else:
         print(f"Device: {device}\n")
+
+    # In dry-run mode with rltracker, show naming preview
+    if dry_run and preset == "rltracker":
+        from .export_presets.rltracker import build_motion_name
+        seed = config.global_.seed or 0
+        global_idx = 0
+        for type_name, samples in batch_specs.items():
+            for s in samples[:3]:
+                name = build_motion_name(s.motion_type, s.vel, global_idx, seed)
+                print(f"  [{global_idx:03d}] {name}")
+                print(f"        prompt: {s.prompt}")
+                if s.vel:
+                    print(f"        vel={s.vel} torso={s.torso_height:.2f}")
+                global_idx += 1
+            global_idx += max(0, len(samples) - 3)
+        print()
 
     # Collect all samples for manifest
     all_samples: list[SampledMotion] = []
@@ -123,28 +151,32 @@ def run_generation(
         n = len(samples)
         spec = config.motion_types[type_name]
         out_dir = output_base / type_name
-        out_dir.mkdir(parents=True, exist_ok=True)
 
-        print(f"\n{'─' * 60}")
-        print(f"[{type_name}] {n} samples")
-        print(f"  Prompt:  {spec.description}")
-        vx_range = spec.vel_cmd.get("vx", VelRange(0.0, 0.0))
-        vy_range = spec.vel_cmd.get("vy", VelRange(0.0, 0.0))
-        wz_range = spec.vel_cmd.get("wz", VelRange(0.0, 0.0))
-        print(f"  Vel:     vx=[{vx_range.min:.2f}, {vx_range.max:.2f}] "
-              f"vy=[{vy_range.min:.2f}, {vy_range.max:.2f}] "
-              f"wz=[{wz_range.min:.2f}, {wz_range.max:.2f}]")
-        print(f"  Torso:   {spec.torso_height_range}")
-        print(f"  Styles:  {spec.styles}")
+        if not (dry_run and preset == "rltracker"):
+            print(f"\n{'─' * 60}")
+            print(f"[{type_name}] {n} samples")
+            print(f"  Prompt:  {spec.description}")
+            vx_range = spec.vel_cmd.get("vx", VelRange(0.0, 0.0))
+            vy_range = spec.vel_cmd.get("vy", VelRange(0.0, 0.0))
+            wz_range = spec.vel_cmd.get("wz", VelRange(0.0, 0.0))
+            print(f"  Vel:     vx=[{vx_range.min:.2f}, {vx_range.max:.2f}] "
+                  f"vy=[{vy_range.min:.2f}, {vy_range.max:.2f}] "
+                  f"wz=[{wz_range.min:.2f}, {wz_range.max:.2f}]")
+            print(f"  Torso:   {spec.torso_height_range}")
+            print(f"  Styles:  {spec.styles}")
 
         if dry_run:
-            for i, s in enumerate(samples[:3]):
-                print(f"  [{i:03d}] {s.prompt}")
-                if s.vel:
-                    print(f"        vel={s.vel} torso={s.torso_height:.2f}")
-            if n > 3:
-                print(f"  ... and {n - 3} more")
-            all_samples.extend(samples)
+            if preset == "rltracker":
+                # Naming preview already shown above; just extend samples
+                all_samples.extend(samples)
+            else:
+                for i, s in enumerate(samples[:3]):
+                    print(f"  [{i:03d}] {s.prompt}")
+                    if s.vel:
+                        print(f"        vel={s.vel} torso={s.torso_height:.2f}")
+                if n > 3:
+                    print(f"  ... and {n - 3} more")
+                all_samples.extend(samples)
             continue
 
         # Build the prompt (shared across num_samples for this type)
@@ -173,8 +205,9 @@ def run_generation(
             prompt=base_prompt,
             num_frames=num_frames,
             constraint_lst=constraints,
-            out_dir=out_dir,
+            out_dir=output_base,  # rltracker: flat output; kimodo: per-type subdir
             device=device,
+            preset=preset,
         )
         elapsed = time.time() - t0
         print(f"  ✓ Generated in {elapsed:.1f}s ({elapsed/n:.2f}s/sample)")
@@ -182,7 +215,8 @@ def run_generation(
         all_samples.extend(samples)
 
     # Save manifest
-    _save_manifest(output_base / "manifest.csv", all_samples)
+    _save_manifest(output_base / "manifest.csv", all_samples,
+                   preset=preset, seed=config.global_.seed or 0)
 
     if not dry_run:
         print(f"\n{'=' * 60}")
@@ -198,16 +232,19 @@ def _generate_batch(
     constraint_lst: list[dict],
     out_dir: Path,
     device: str,
+    preset: str = "kimodo",
 ):
     """Call Kimodo Python API to generate one batch of motions.
 
     One Kimodo model() call with num_samples=N produces N variations
     from the same prompt and constraints.
+
+    Args:
+        preset: "kimodo" for default NPZ+CSV output, "rltracker" for
+                RLTracker dataset format (flat dirs with motion.npz).
     """
     from kimodo import load_model
     from kimodo.constraints import load_constraints_lst
-    from kimodo.exports.motion_io import save_kimodo_npz
-    from kimodo.exports.mujoco import MujocoQposConverter
 
     # Load model once per batch
     model, resolved_name = load_model(
@@ -221,7 +258,6 @@ def _generate_batch(
     # Parse constraints into Kimodo objects
     kimodo_constraints = []
     if constraint_lst:
-        # constraint_lst is a list of dicts; convert to Kimodo objects
         kimodo_constraints = load_constraints_lst(
             constraint_lst, model.skeleton, device=device
         )
@@ -241,7 +277,9 @@ def _generate_batch(
         seed=seed_val,
     )
 
-    # Save outputs
+    fps = config.global_.fps
+
+    # Export per-sample
     for i, sample in enumerate(samples):
         single = {
             k: (v[i] if hasattr(v, "shape") and len(v.shape) > 0
@@ -249,18 +287,26 @@ def _generate_batch(
             for k, v in output.items()
         }
 
-        stem = f"{sample.motion_type}_{i:04d}"
-
-        # NPZ
-        npz_path = out_dir / f"{stem}.npz"
-        save_kimodo_npz(str(npz_path), single)
-
-        # CSV (MuJoCo qpos)
-        if "g1" in resolved_name.lower():
-            converter = MujocoQposConverter(model.skeleton)
-            qpos = converter.dict_to_qpos(single, device)
-            csv_path = out_dir / f"{stem}.csv"
-            np.savetxt(str(csv_path), qpos.cpu().numpy(), delimiter=",")
+        if preset == "rltracker":
+            _export_rltracker(
+                single=single,
+                model=model,
+                fps=fps,
+                sample_idx=i,
+                sample=sample,
+                seed=seed_val or 0,
+                output_base=out_dir,
+                device=device,
+            )
+        else:
+            _export_kimodo(
+                single=single,
+                model=model,
+                resolved_name=resolved_name,
+                sample=sample,
+                out_dir=out_dir / sample.motion_type,
+                device=device,
+            )
 
     # Cleanup
     del model
@@ -269,6 +315,97 @@ def _generate_batch(
         torch.cuda.empty_cache()
     except ImportError:
         pass
+
+
+def _export_kimodo(
+    single: dict,
+    model,
+    resolved_name: str,
+    sample: SampledMotion,
+    out_dir: Path,
+    device: str,
+):
+    """Default Kimodo export: NPZ + optional MuJoCo CSV."""
+    import numpy as np
+    from kimodo.exports.motion_io import save_kimodo_npz
+    from kimodo.exports.mujoco import MujocoQposConverter
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stem = f"{sample.motion_type}_{sample.motion_type}_{0:04d}"  # fallback
+    # Use proper index from sample if available
+    idx = getattr(sample, '_global_idx', 0)
+    stem = f"{sample.motion_type}_{idx:04d}"
+
+    # NPZ
+    npz_path = out_dir / f"{stem}.npz"
+    save_kimodo_npz(str(npz_path), single)
+
+    # CSV (MuJoCo qpos)
+    if "g1" in resolved_name.lower():
+        converter = MujocoQposConverter(model.skeleton)
+        qpos = converter.dict_to_qpos(single, device)
+        csv_path = out_dir / f"{stem}.csv"
+        np.savetxt(str(csv_path), qpos.cpu().numpy(), delimiter=",")
+
+
+def _export_rltracker(
+    single: dict,
+    model,
+    fps: float,
+    sample_idx: int,
+    sample: SampledMotion,
+    seed: int,
+    output_base: Path,
+    device: str,
+):
+    """Export one motion in RLTracker dataset format.
+
+    Uses Kimodo FK + MujocoQposConverter to build the 7-key NPZ
+    (joint_pos, joint_vel, body_pos_w, body_quat_w,
+     body_lin_vel_w, body_ang_vel_w, fps).
+    """
+    import numpy as np
+    import torch
+
+    # Run FK to get posed_joints + global_rot_mats
+    local_rot_mats_t = torch.from_numpy(
+        np.asarray(single["local_rot_mats"])
+    ).float().to(device)
+    root_positions_t = torch.from_numpy(
+        np.asarray(single["root_positions"])
+    ).float().to(device)
+
+    if local_rot_mats_t.dim() == 3:
+        local_rot_mats_t = local_rot_mats_t.unsqueeze(0)
+    if root_positions_t.dim() == 1:
+        root_positions_t = root_positions_t.unsqueeze(0)
+
+    global_rot_mats, posed_joints, _ = model.skeleton.fk(
+        local_rot_mats_t, root_positions_t
+    )
+
+    # Convert to numpy
+    posed_joints_np = posed_joints.squeeze(0).cpu().numpy().astype(np.float32)
+    global_rot_mats_np = global_rot_mats.squeeze(0).cpu().numpy().astype(np.float32)
+    local_rot_mats_np = local_rot_mats_t.squeeze(0).cpu().numpy().astype(np.float32)
+    root_positions_np = root_positions_t.squeeze(0).cpu().numpy().astype(np.float32)
+
+    from .export_presets import get_preset
+    exporter = get_preset("rltracker")
+    exporter.export(
+        posed_joints=posed_joints_np,
+        global_rot_mats=global_rot_mats_np,
+        local_rot_mats=local_rot_mats_np,
+        root_positions=root_positions_np,
+        fps=float(fps),
+        sample_idx=sample_idx,
+        motion_type=sample.motion_type,
+        vel=sample.vel,
+        torso_height=sample.torso_height,
+        style=sample.style,
+        seed=seed,
+        output_base=output_base,
+    )
 
 
 # ── entry point ───────────────────────────────────────────────────
@@ -300,6 +437,16 @@ def main():
         "--num-total", "-n", type=int, default=None,
         help="Override: generate exactly N random motions across all types",
     )
+    parser.add_argument(
+        "--method", "-m", type=str, default=None,
+        choices=["uniform", "lhs"],
+        help="Sampling method (overrides config). 'lhs' = Latin Hypercube Sampling.",
+    )
+    parser.add_argument(
+        "--preset", "-p", type=str, default=None,
+        choices=["kimodo", "rltracker"],
+        help="Export preset (overrides config). 'rltracker' = flat dirs with motion.npz.",
+    )
 
     args = parser.parse_args()
 
@@ -311,21 +458,36 @@ def main():
 
     if args.gpu is not None:
         config.global_.gpu = args.gpu
+    if args.method is not None:
+        config.global_.sampling_method = args.method
+    if args.preset is not None:
+        config.global_.export_preset = args.preset
 
+    preset = config.global_.export_preset
     output_base = Path(args.output or config.global_.output_dir)
 
     # Override: random weighted sampling instead of fixed per-type counts
     if args.num_total is not None:
         sampler = MotionSampler(config, seed=config.global_.seed)
-        all_samples = sampler.generate_random_specs(args.num_total)
+        method = config.global_.sampling_method
+        all_samples = sampler.generate_random_specs(args.num_total, method=method)
 
-        print(f"=== Random Sample Mode ===")
+        print(f"=== Random Sample Mode (method={method}, preset={preset}) ===")
         print(f"Total: {args.num_total} motions across "
               f"{len(set(s.motion_type for s in all_samples))} types")
         if args.dry_run:
-            for i, s in enumerate(all_samples[:10]):
-                print(f"  [{i:03d}] [{s.motion_type}] {s.prompt}")
-            print(f"  ... and {args.num_total - 10} more")
+            show_n = min(len(all_samples), 10)
+            for i, s in enumerate(all_samples[:show_n]):
+                if preset == "rltracker":
+                    from .export_presets.rltracker import build_motion_name
+                    name = build_motion_name(
+                        s.motion_type, s.vel, i, config.global_.seed or 0
+                    )
+                    print(f"  [{i:03d}] {name}  |  [{s.motion_type}] {s.prompt}")
+                else:
+                    print(f"  [{i:03d}] [{s.motion_type}] {s.prompt}")
+            if len(all_samples) > show_n:
+                print(f"  ... and {len(all_samples) - show_n} more")
             sys.exit(0)
 
         # Group by type for generation
@@ -335,9 +497,6 @@ def main():
 
         for type_name, samples in by_type.items():
             print(f"\n[{type_name}] {len(samples)} samples")
-            out_dir = output_base / type_name
-            out_dir.mkdir(parents=True, exist_ok=True)
-
             constraints = build_constraints_json(samples[0])
             num_frames = int(samples[0].duration * config.global_.fps)
 
@@ -347,11 +506,13 @@ def main():
                 prompt=samples[0].prompt,
                 num_frames=num_frames,
                 constraint_lst=constraints,
-                out_dir=out_dir,
+                out_dir=output_base,
                 device=f"cuda:{config.global_.gpu}",
+                preset=preset,
             )
 
-        _save_manifest(output_base / "manifest.csv", all_samples)
+        _save_manifest(output_base / "manifest.csv", all_samples,
+                       preset=preset, seed=config.global_.seed or 0)
         return
 
     run_generation(
@@ -359,6 +520,7 @@ def main():
         output_base=output_base,
         dry_run=args.dry_run,
         gpu=config.global_.gpu,
+        preset=preset,
     )
 
 

@@ -1,4 +1,9 @@
-"""Distribution-based sampling for locomotion motion parameters."""
+"""Distribution-based sampling for locomotion motion parameters.
+
+Supports two sampling methods:
+  - "uniform": independent random draws from each dimension (default)
+  - "lhs": Latin Hypercube Sampling for better coverage of high-D parameter space
+"""
 
 from dataclasses import dataclass
 from typing import Optional
@@ -20,6 +25,99 @@ class SampledMotion:
     diffusion_steps: int
 
 
+def lhs_sample(rng: np.random.RandomState, ranges: list[tuple[float, float]], n: int) -> np.ndarray:
+    """Latin Hypercube Sampling over D continuous dimensions.
+
+    Divides each dimension into ``n`` equal-probability strata and draws
+    one sample per stratum.  Intra-stratum positions are randomised
+    (``U(0,1)`` within the cell), so repeated seeds produce identical grids
+    while individual draws remain stochastic.
+
+    Args:
+        rng: numpy RandomState for reproducibility.
+        ranges: list of ``(low, high)`` bounds, one per dimension.  Shape ``(D,)``.
+        n: number of samples.
+
+    Returns:
+        ``(n, D)`` array of sampled values.
+    """
+    d = len(ranges)
+    # stratified grid: each column is a random permutation of (0, 1, ..., n-1)
+    grid = np.empty((n, d))
+    for j in range(d):
+        grid[:, j] = rng.permutation(n)
+
+    # intra-stratum jitter  U ~ (0, 1)
+    jitter = rng.uniform(size=(n, d))
+
+    # normalise to [0, 1), then map to actual ranges
+    samples = (grid + jitter) / float(n)
+
+    for j, (lo, hi) in enumerate(ranges):
+        samples[:, j] = lo + samples[:, j] * (hi - lo)
+
+    return samples
+
+
+def _spec_param_ranges(spec: MotionSpec) -> list[tuple[float, float]]:
+    """Return ordered continuous-parameter ranges for a MotionSpec.
+
+    Order: duration, vx, vy, wz, torso_height.
+    Dimensions present are determined by ``vel_cmd`` keys.
+    """
+    ranges = [spec.duration_range]
+    for key in ("vx", "vy", "wz"):
+        if key in spec.vel_cmd:
+            ranges.append((spec.vel_cmd[key].min, spec.vel_cmd[key].max))
+    ranges.append(spec.torso_height_range)
+    return ranges
+
+
+def _lhs_sample_from_spec(
+    rng: np.random.RandomState, spec: MotionSpec
+) -> list[SampledMotion]:
+    """Generate ``spec.num_samples`` motions with LHS over the spec's ranges."""
+    from .prompts import build_motion_prompt
+
+    n = spec.num_samples
+    ranges = _spec_param_ranges(spec)
+    lhs_values = lhs_sample(rng, ranges, n)
+
+    vel_keys_present = [k for k in ("vx", "vy", "wz") if k in spec.vel_cmd]
+
+    samples = []
+    for row in range(n):
+        vals = iter(lhs_values[row])
+        duration = float(next(vals))
+
+        vel = {}
+        for k in vel_keys_present:
+            vel[k] = float(next(vals))
+
+        torso_height = float(next(vals))
+
+        style = spec.styles[rng.randint(len(spec.styles))] if spec.styles else ""
+
+        prompt = build_motion_prompt(
+            spec.description,
+            style,
+            torso_height=torso_height if spec.name != "stand" else None,
+            vel=vel,
+        )
+
+        samples.append(SampledMotion(
+            motion_type=spec.name,
+            prompt=prompt,
+            duration=duration,
+            vel=vel,
+            torso_height=torso_height,
+            style=style,
+            diffusion_steps=spec.diffusion_steps,
+        ))
+
+    return samples
+
+
 class MotionSampler:
     """Samples motion parameters from LocomotionConfig distributions."""
 
@@ -30,7 +128,7 @@ class MotionSampler:
         self._weights = [s.weight for s in self._specs]
 
     def sample_params(self, spec: MotionSpec) -> SampledMotion:
-        """Sample one motion from a specific MotionSpec distribution."""
+        """Sample one motion from a specific MotionSpec distribution (uniform)."""
         from .prompts import build_motion_prompt
 
         duration = self.rng.uniform(*spec.duration_range)
@@ -65,24 +163,61 @@ class MotionSampler:
         idx = self.rng.choice(len(self._specs), p=probs)
         return self._specs[idx]
 
-    def generate_batch_specs(self) -> dict[str, list[SampledMotion]]:
-        """For each motion type, sample `num_samples` motions.
+    def generate_batch_specs(self, method: str = "uniform") -> dict[str, list[SampledMotion]]:
+        """For each motion type, sample ``num_samples`` motions.
+
+        Args:
+            method: "uniform" (default) or "lhs" (Latin Hypercube Sampling).
 
         Returns:
             Dict mapping type_name → list of SampledMotion objects.
         """
         batch: dict[str, list[SampledMotion]] = {}
         for spec in self._specs:
-            samples = [self.sample_params(spec) for _ in range(spec.num_samples)]
-            batch[spec.name] = samples
+            if method == "lhs":
+                batch[spec.name] = _lhs_sample_from_spec(self.rng, spec)
+            else:
+                batch[spec.name] = [self.sample_params(spec) for _ in range(spec.num_samples)]
         return batch
 
-    def generate_random_specs(self, total: int) -> list[SampledMotion]:
-        """Generate `total` motions by randomly selecting types (weighted).
+    def generate_random_specs(self, total: int, method: str = "uniform") -> list[SampledMotion]:
+        """Generate ``total`` motions by randomly selecting types (weighted).
+
+        Args:
+            total: number of motions desired.
+            method: "uniform" (default) or "lhs".
 
         Returns:
             Flat list of SampledMotion objects.
         """
+        if method == "lhs":
+            # pick n from each type weighted, then LHS in each group
+            counts = np.floor(np.array(self._weights) / sum(self._weights) * total).astype(int)
+            # distribute remainder
+            deficit = total - counts.sum()
+            order = self.rng.permutation(len(self._specs))
+            for i in range(deficit):
+                counts[order[i % len(self._specs)]] += 1
+
+            results: list[SampledMotion] = []
+            for spec, n in zip(self._specs, counts):
+                if n == 0:
+                    continue
+                spec_copy = MotionSpec(
+                    name=spec.name,
+                    description=spec.description,
+                    duration_range=spec.duration_range,
+                    vel_cmd=dict(spec.vel_cmd),
+                    torso_height_range=spec.torso_height_range,
+                    styles=spec.styles,
+                    weight=spec.weight,
+                    num_samples=n,
+                    diffusion_steps=spec.diffusion_steps,
+                )
+                results.extend(_lhs_sample_from_spec(self.rng, spec_copy))
+            self.rng.shuffle(results)
+            return results
+
         specs = []
         for _ in range(total):
             spec = self.sample_weighted_type()

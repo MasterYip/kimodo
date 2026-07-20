@@ -1,0 +1,90 @@
+# =============================================================================
+# G1 Normal Locomotion — Full Coverage with LHS Sampling
+#
+# All motions use "normal" style.  Latin Hypercube Sampling (LHS) ensures
+# uniform coverage across all continuous parameter dimensions.
+#
+# Motion types:
+#   walk  — all directions (forward, backward, sideways), all turning rates
+#   run   — forward running at speed
+#   stand — idle postures
+#   squat — low crouching / squatting movement
+#
+# Usage:
+#   cd /data/masteryip/kimodo/kimodo
+#   source scripts/env.sh
+#   PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
+#       -c scripts/locomotion_framework/configs/g1_normal_loco.yaml [-n N]
+# =============================================================================
+
+global:
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 42
+  output_dir: outputs/normal_loco
+  sampling_method: lhs   # Latin Hypercube Sampling for coverage
+  export_preset: rltracker  # RLTracker dataset format (flat dirs, motion.npz)
+
+motion_types:
+  # ── Walk — all directions, all turning rates ───────────────────
+  walk:
+    description: "a robot walks"
+    duration: [2.0, 8.0]
+    vel_cmd:
+      # forward (+) / backward (-), full walking speed range
+      vx: [-0.60, 0.80]
+      # lateral (positive = right, negative = left)
+      vy: [-0.40, 0.40]
+      # angular velocity (all turning rates)
+      wz: [-0.50, 0.50]
+    torso_height: [0.60, 0.85]
+    styles:
+      - "normally"
+      - "at a steady pace"
+    weight: 0.50
+    num_samples: 50
+
+  # ── Run — forward only ─────────────────────────────────────────
+  run:
+    description: "a robot runs"
+    duration: [2.0, 5.0]
+    vel_cmd:
+      vx: [0.80, 2.00]
+      vy: [-0.10, 0.10]
+      wz: [-0.15, 0.15]
+    torso_height: [0.60, 0.80]
+    styles:
+      - "normally"
+      - "steadily"
+    weight: 0.20
+    num_samples: 50
+
+  # ── Stand ──────────────────────────────────────────────────────
+  stand:
+    description: "a robot stands still"
+    duration: [2.0, 6.0]
+    vel_cmd:
+      vx: [-0.02, 0.02]
+      vy: [-0.02, 0.02]
+      wz: [-0.02, 0.02]
+    torso_height: [0.70, 0.90]
+    styles:
+      - "idle"
+      - "at rest"
+    weight: 0.15
+    num_samples: 50
+
+  # ── Squat ──────────────────────────────────────────────────────
+  squat_move:
+    description: "a robot squats and moves"
+    duration: [1.5, 5.0]
+    vel_cmd:
+      vx: [-0.20, 0.30]
+      vy: [-0.10, 0.10]
+      wz: [-0.20, 0.20]
+    torso_height: [0.35, 0.55]
+    styles:
+      - "normally"
+      - "while staying low"
+    weight: 0.15
+    num_samples: 50

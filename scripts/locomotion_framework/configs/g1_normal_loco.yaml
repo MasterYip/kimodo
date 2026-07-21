@@ -35,10 +35,10 @@ motion_types:
       # forward (+) / backward (-), full walking speed range
       vx: [-0.60, 0.80]
       # lateral (positive = right, negative = left)
-      vy: [-0.40, 0.40]
+      vy: [-0.50, 0.50]
       # angular velocity (all turning rates)
-      wz: [-0.50, 0.50]
-    torso_height: [0.60, 0.85]
+      wz: [-0.80, 0.80]
+    torso_height: [0.7, 0.85]
     styles:
       - "normally"
       - "at a steady pace"
@@ -50,9 +50,9 @@ motion_types:
     description: "a robot runs"
     duration: [5.0, 8.0]
     vel_cmd:
-      vx: [0.80, 2.00]
-      vy: [-0.10, 0.10]
-      wz: [-0.15, 0.15]
+      vx: [-1.0, 2.00]
+      vy: [-1.0, 1.00]
+      wz: [-0.5, 0.5]
     torso_height: [0.60, 0.80]
     styles:
       - "normally"
@@ -72,7 +72,7 @@ motion_types:
     styles:
       - "idle"
       - "at rest"
-    weight: 0.15
+    weight: 0.30
     num_samples: 50
 
   # ── Squat ──────────────────────────────────────────────────────
@@ -83,7 +83,7 @@ motion_types:
       vx: [-0.20, 0.30]
       vy: [-0.10, 0.10]
       wz: [-0.20, 0.20]
-    torso_height: [0.35, 0.55]
+    torso_height: [0.5, 0.6]
     styles:
       - "normally"
       - "while staying low"

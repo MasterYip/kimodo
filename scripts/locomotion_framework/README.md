@@ -14,19 +14,19 @@ source scripts/env.sh
 
 # Dry run — see what will be generated
 PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
-    -c scripts/locomotion_framework/configs/g1_locomotion.yaml --dry-run
+    -c scripts/locomotion_framework/configs/g1_nromal_loco.yaml --dry-run
 
 # Generate full batch (all motion types)
 PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
-    -c scripts/locomotion_framework/configs/g1_locomotion.yaml
+    -c scripts/locomotion_framework/configs/g1_nromal_loco.yaml
 
 # Generate exactly 100 motions (random weighted selection)
 PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
-    -c scripts/locomotion_framework/configs/g1_locomotion.yaml -n 100
+    -c scripts/locomotion_framework/configs/g1_nromal_loco.yaml -n 100
 
 # Use a specific GPU
 PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
-    -c scripts/locomotion_framework/configs/g1_locomotion.yaml -g 1
+    -c scripts/locomotion_framework/configs/g1_nromal_loco.yaml -g 1
 ```
 
 ---
@@ -36,7 +36,7 @@ PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
 ```
 locomotion_framework/
 ├── configs/
-│   └── g1_locomotion.yaml    ← Distribution definitions
+│   └── g1_nromal_loco.yaml    ← Distribution definitions
 ├── config.py                 ← MotionSpec dataclass + YAML loader
 ├── sampler.py                ← Distribution sampling
 ├── constraints.py            ← Velocity → Root2D path builder
@@ -189,7 +189,7 @@ and the motion will be purely text-guided.
 from locomotion_framework.config import load_config
 from locomotion_framework.sampler import MotionSampler
 
-config = load_config("configs/g1_locomotion.yaml")
+config = load_config("configs/g1_nromal_loco.yaml")
 sampler = MotionSampler(config, seed=42)
 
 # Generate 50 random motions

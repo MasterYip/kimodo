@@ -29,7 +29,7 @@ global:
 motion_types:
   # ── Walk — all directions, all turning rates ───────────────────
   walk:
-    description: "a robot walks"
+    description: "a person walks"
     duration: [5.0, 8.0]
     vel_cmd:
       # forward (+) / backward (-), full walking speed range
@@ -47,7 +47,7 @@ motion_types:
 
   # ── Run — forward only ─────────────────────────────────────────
   run:
-    description: "a robot runs"
+    description: "a person runs"
     duration: [5.0, 8.0]
     vel_cmd:
       vx: [-1.0, 2.00]
@@ -62,28 +62,28 @@ motion_types:
 
   # ── Stand ──────────────────────────────────────────────────────
   stand:
-    description: "a robot stands still"
+    description: "a person stands"
     duration: [5.0, 8.0]
     vel_cmd:
-      vx: [-0.02, 0.02]
-      vy: [-0.02, 0.02]
-      wz: [-0.02, 0.02]
-    torso_height: [0.70, 0.90]
+      vx: [-0.10, 0.10]
+      vy: [-0.10, 0.10]
+      wz: [-0.3, 0.3]
+    torso_height: [0.80, 0.90]
     styles:
-      - "idle"
-      - "at rest"
+      - "steadily"
+      - "normally"
     weight: 0.30
     num_samples: 50
 
   # ── Squat ──────────────────────────────────────────────────────
   squat_move:
-    description: "a robot squats and moves"
+    description: "a person squats and moves"
     duration: [5.0, 8.0]
     vel_cmd:
       vx: [-0.20, 0.30]
       vy: [-0.10, 0.10]
       wz: [-0.20, 0.20]
-    torso_height: [0.5, 0.6]
+    torso_height: [0.5, 0.7]
     styles:
       - "normally"
       - "while staying low"

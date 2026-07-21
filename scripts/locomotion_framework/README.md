@@ -12,21 +12,89 @@ motion type via configurable distributions.
 cd /data/masteryip/kimodo/kimodo
 source scripts/env.sh
 
-# Dry run — see what will be generated
+# Dry run — see what will be generated with naming preview
 PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
-    -c scripts/locomotion_framework/configs/g1_nromal_loco.yaml --dry-run
+    -c scripts/locomotion_framework/configs/g1_normal_loco.yaml --dry-run --preset rltracker
 
-# Generate full batch (all motion types)
+# Generate full batch (all motion types, single GPU)
 PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
-    -c scripts/locomotion_framework/configs/g1_nromal_loco.yaml
+    -c scripts/locomotion_framework/configs/g1_normal_loco.yaml --preset rltracker
 
 # Generate exactly 100 motions (random weighted selection)
 PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
-    -c scripts/locomotion_framework/configs/g1_nromal_loco.yaml -n 100
+    -c scripts/locomotion_framework/configs/g1_normal_loco.yaml -n 100
 
 # Use a specific GPU
 PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
-    -c scripts/locomotion_framework/configs/g1_nromal_loco.yaml -g 1
+    -c scripts/locomotion_framework/configs/g1_normal_loco.yaml -g 1
+```
+
+---
+
+## Distributed Multi-GPU Generation
+
+For large datasets, generation can be split across multiple GPUs to cut
+wall-clock time by **N_GPUs×**. Motion types are distributed round-robin
+across GPUs, and each GPU launches an independent orchestrator process.
+
+```bash
+# All 8 GPUs (default), full config
+bash scripts/locomotion_framework/run_distributed.sh
+
+# 4 specific GPUs
+bash scripts/locomotion_framework/run_distributed.sh -g 0,1,2,3
+
+# 4 GPUs, 200 random motions
+bash scripts/locomotion_framework/run_distributed.sh -g 0,1,2,3 -n 200
+
+# Dry run — print GPU assignment without generating
+bash scripts/locomotion_framework/run_distributed.sh --dry-run
+```
+
+### How It Works
+
+1. **Config splitting**: The launcher parses the YAML config and distributes
+   motion types round-robin across GPUs (e.g. with 4 types on 4 GPUs, each
+   GPU gets one type).
+
+2. **Per-GPU processes**: Each GPU runs `CUDA_VISIBLE_DEVICES=<gpu>` with an
+   independent `orchestrator.py` process using a temporary config containing
+   only its assigned motion types.
+
+3. **Parallel execution**: All processes run concurrently. Since the Kimodo
+   model takes ~6 GB VRAM, one process per GPU works well.
+
+4. **Shared output**: All processes write to the same output directory.
+   Outputs are independent per motion (named by type + index), so there are
+   no write conflicts.
+
+### Performance
+
+| GPUs | Motion types | Wall time (200 motions) |
+|------|:-----------:|------------------------:|
+| 1 | 4 | ~18 min |
+| 4 | 1 each | ~5 min |
+| 8 | ½ each | ~3 min |
+
+Single-GPU generation is the bottleneck because the orchestrator processes
+motion types sequentially within one process. Distributed mode parallelizes
+across types.
+
+### Manual GPU Assignment
+
+To control exactly which types go to which GPU, create multiple config files
+and launch them manually:
+
+```bash
+# GPU 0 — walk + run
+CUDA_VISIBLE_DEVICES=0 python3 -m locomotion_framework.orchestrator \
+    -c configs/walk_run.yaml --preset rltracker &
+
+# GPU 1 — stand + squat
+CUDA_VISIBLE_DEVICES=1 python3 -m locomotion_framework.orchestrator \
+    -c configs/stand_squat.yaml --preset rltracker &
+
+wait
 ```
 
 ---
@@ -36,12 +104,16 @@ PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
 ```
 locomotion_framework/
 ├── configs/
-│   └── g1_nromal_loco.yaml    ← Distribution definitions
-├── config.py                 ← MotionSpec dataclass + YAML loader
-├── sampler.py                ← Distribution sampling
-├── constraints.py            ← Velocity → Root2D path builder
-├── prompts.py                ← Text prompt composition
-├── orchestrator.py           ← Batch runner + manifest output
+│   └── g1_normal_loco.yaml    ← Distribution definitions
+├── config.py                  ← MotionSpec dataclass + YAML loader
+├── sampler.py                 ← Distribution sampling (LHS + uniform)
+├── constraints.py             ← Velocity → Root2D path builder (dense stride=1)
+├── prompts.py                 ← Text prompt composition
+├── orchestrator.py            ← Batch runner + manifest output
+├── run.sh                     ← Single-GPU quick launch
+├── run_full.sh                ← Full 200-motion preset launcher
+├── run_distributed.sh         ← Multi-GPU distributed launcher
+├── analyze_quality.py         ← Post-generation quality analysis
 └── README.md
 ```
 
@@ -54,22 +126,24 @@ global:
   model: kimodo-g1-rp
   diffusion_steps: 100
   seed: 42
-  output_dir: outputs/locomotion
+  output_dir: outputs/normal_loco
+  sampling_method: lhs          # "uniform" or "lhs" (Latin Hypercube Sampling)
+  export_preset: rltracker      # "kimodo" or "rltracker" (flat dirs + motion.npz)
 
 motion_types:
   walk:
-    description: "a robot walks forward"      # base prompt
-    duration: [3.0, 8.0]                     # uniform range (seconds)
-    vel_cmd:                                  # velocity command ranges
-      vx: [0.2, 0.8]  # forward (m/s)
-      vy: [-0.1, 0.1] # lateral (m/s)
-      wz: [-0.1, 0.1] # angular (rad/s)
-    torso_height: [0.65, 0.85]               # normalized range
-    styles:                                    # style modifiers
-      - "casually"
-      - "briskly"
-    weight: 0.35                              # sampling probability
-    num_samples: 40                           # generated count
+    description: "a robot walks"            # base prompt
+    duration: [5.0, 8.0]                    # uniform range (seconds)
+    vel_cmd:                                # velocity command ranges
+      vx: [-0.60, 0.80]   # forward (m/s)
+      vy: [-0.50, 0.50]   # lateral (m/s)
+      wz: [-0.80, 0.80]   # angular (rad/s)
+    torso_height: [0.70, 0.85]              # normalized range
+    styles:                                  # style modifiers
+      - "normally"
+      - "at a steady pace"
+    weight: 0.50                             # sampling probability (for -n mode)
+    num_samples: 50                          # generated count (for full mode)
 ```
 
 ### Velocity Command Semantics
@@ -86,7 +160,16 @@ motion_types:
 
 ### 1. Distribution Sampling
 
-For each motion type, the sampler draws from uniform distributions:
+For each motion type, the sampler draws from the configured distributions:
+
+- **Latin Hypercube Sampling (LHS)**: Stratified sampling across all 5
+  dimensions (vx, vy, wz, torso_height, duration) for uniform coverage.
+  Recommended for full coverage datasets.
+
+- **Uniform random**: Independent uniform draws per parameter. Used when
+  `sampling_method: uniform` is set.
+
+Sampled parameters:
 - Duration: `U(duration[0], duration[1])`
 - Velocity: `U(vx[0], vx[1])`, `U(vy[0], vy[1])`, `U(wz[0], wz[1])`
 - Torso height: `U(torso_height[0], torso_height[1])`
@@ -94,17 +177,32 @@ For each motion type, the sampler draws from uniform distributions:
 
 ### 2. Velocity → Root2D Path
 
-Sampled velocity commands are converted to a 2D root trajectory:
-- **Straight**: `x(t) = vx · t · dt`, `z(t) = vy · t · dt`
-- **Turning**: circular arc + heading constraints via `global_root_heading`
-- Passed to Kimodo as `Root2DConstraintSet`
+Sampled velocity commands are converted to a 2D root trajectory using the
+demo `05_root_path` method:
+
+- **Dense stride=1 constraints**: Every frame is constrained, matching the
+  Kimodo demo approach. The diffusion model with hard inpainting at each
+  DDIM step produces clean motions without tail jitter.
+
+- **Straight-line**: `x(t) = vx · t · dt`, `z(t) = vy · t · dt`
+
+- **Arc turning**: Circular arc with heading constraints via
+  `global_root_heading`
+
+- **Exact duration**: Motions are generated at exactly the sampled duration
+  (no margin/truncation needed), since dense inpainting doesn't require
+  settling time.
+
+Constraints are passed to Kimodo as `Root2DConstraintSet` with per-sample
+list API (`constraint_lst=list[list]`).
 
 ### 3. Text Prompt Composition
 
 Parameters are composed into a single prompt:
+
 ```
-"a robot walks forward briskly."
-"a robot with crouching walks forward carefully."
+"a robot walks slowly at a steady pace."
+"a robot runs at a brisk pace normally slightly crouching."
 ```
 
 Torso height is mapped to qualitative hints:
@@ -116,34 +214,77 @@ Torso height is mapped to qualitative hints:
 
 ### 4. Batch Generation
 
-The orchestrator loads Kimodo once, then for each motion type:
-1. Builds the prompt + Root2D constraints
-2. Calls `model(prompt, num_frames, constraint_lst=..., num_samples=N)`
-3. Saves `.npz` + `.csv` per sample with metadata
+The orchestrator loads Kimodo once per motion type, then:
+1. Builds per-sample prompts, frames, and dense Root2D constraints via the
+   Kimodo **list API** (each sample gets its own unique velocity path)
+2. Calls `model(prompts, num_frames, constraint_lst=..., num_denoising_steps=N)`
+3. Trims batch-padding frames (Kimodo pads all outputs to `max(num_frames)`)
+4. Exports each sample in the selected preset format
 
-Kimodo processes all `num_samples` in parallel through one denoising loop.
+Kimodo processes all samples of one motion type in a single denoising loop.
 
 ---
 
-## Output
+## Export Presets
+
+### `rltracker` (default)
+
+Flat directory structure, one `motion.npz` per motion:
+
+```
+outputs/normal_loco/
+├── manifest.csv
+├── walk_fwd_028_norm_0003__K42/
+│   └── motion.npz          ← 7 keys
+├── walk_lat_295_norm_0000__K42/
+│   └── motion.npz
+├── run_fwd_001_fast_0001__K42/
+│   └── motion.npz
+├── stand_still_000_still_0000__K42/
+│   └── motion.npz
+└── ...
+```
+
+Naming: `{type}_{traj}_{heading:03d}_{pace}_{var:04d}__K{seed}`
+
+| Component | Values | Source |
+|-----------|--------|--------|
+| `type` | `walk`, `run`, `stand`, `squat` | `motion_type` from config |
+| `traj` | `fwd`, `bwd`, `lat`, `turn`, `still` | computed from (vx, vy, wz) |
+| `heading` | `000`–`359` | `int(round(atan2(vy, vx)*180/pi)) % 360` |
+| `pace` | `slow`, `norm`, `fast`, `sprt`, `still` | from `|vx|` magnitude |
+| `var` | `0000`–`9999` | sequential per type |
+| `seed` | global config seed | `K{seed}` (K = Kimodo origin) |
+
+NPZ keys (float32, Kimodo native 30 fps):
+| Key | Shape | Description |
+|-----|-------|-------------|
+| `fps` | `(1,)` | Frames per second |
+| `joint_pos` | `(T, 29)` | 29 hinge joint angles (radians) |
+| `joint_vel` | `(T, 29)` | Joint angular velocities |
+| `body_pos_w` | `(T, 30, 3)` | 30 body world positions (m, MuJoCo: z-up x-forward) |
+| `body_quat_w` | `(T, 30, 4)` | 30 body world quaternions (w,x,y,z) |
+| `body_lin_vel_w` | `(T, 30, 3)` | Body linear velocities |
+| `body_ang_vel_w` | `(T, 30, 3)` | Body angular velocities |
+
+### `kimodo` (legacy)
+
+Per-type directories with NPZ + CSV:
 
 ```
 outputs/locomotion/
-├── manifest.csv              ← All samples: type, vel, torso, style, paths
+├── manifest.csv
 ├── walk/
-│   ├── metadata.json         ← Per-batch parameter summary
+│   ├── metadata.json
 │   ├── walk_0000.npz         ← Kimodo format (posed_joints, rot_mats, ...)
 │   ├── walk_0000.csv         ← MuJoCo qpos format
-│   ├── walk_0001.npz
-│   └── ...
-├── crouch_walk/
-│   ├── metadata.json
-│   ├── crouch_walk_0000.npz
 │   └── ...
 └── ...
 ```
 
-### Manifest CSV Columns
+---
+
+## Manifest CSV Columns
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -154,7 +295,21 @@ outputs/locomotion/
 | `vx`, `vy`, `wz` | float | Sampled velocity command |
 | `torso_height` | float | Sampled normalized height |
 | `style` | str | Sampled style modifier |
-| `npz_path`, `csv_path` | str | Relative output paths |
+| `path` | str | Relative path to `motion.npz` |
+
+---
+
+## Quality Analysis
+
+```bash
+# Run on generated output
+PYTHONPATH=. python3 scripts/locomotion_framework/analyze_quality.py outputs/normal_loco
+```
+
+Metrics computed:
+- **T/M**: Tail/Mid velocity ratio — should be ~1.0 (no deceleration at tail)
+- **JitT/H**: Tail/Head jitter ratio — < 2x is excellent, 2-3x is good, > 5x is bad
+- Per-type summaries and distribution breakdowns saved to `quality_analysis.json`
 
 ---
 
@@ -180,8 +335,8 @@ jump:
 
 ### Disabling velocity constraints
 
-Set all vel_cmd ranges to `[0.0, 0.0]` — no Root2D constraint will be generated,
-and the motion will be purely text-guided.
+Set all vel_cmd ranges to `[0.0, 0.0]` — no Root2D constraint will be
+generated, and the motion will be purely text-guided.
 
 ### Using the Python API directly
 
@@ -189,7 +344,7 @@ and the motion will be purely text-guided.
 from locomotion_framework.config import load_config
 from locomotion_framework.sampler import MotionSampler
 
-config = load_config("configs/g1_nromal_loco.yaml")
+config = load_config("configs/g1_normal_loco.yaml")
 sampler = MotionSampler(config, seed=42)
 
 # Generate 50 random motions

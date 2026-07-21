@@ -24,6 +24,7 @@ global:
   output_dir: outputs/normal_loco
   sampling_method: lhs   # Latin Hypercube Sampling for coverage
   export_preset: rltracker  # RLTracker dataset format (flat dirs, motion.npz)
+  generate_margin: 2.0   # generate +2s then trim 1s each end (proven across all types)
 
 motion_types:
   # ── Walk — all directions, all turning rates ───────────────────

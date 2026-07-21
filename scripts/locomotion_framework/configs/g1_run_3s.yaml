@@ -1,0 +1,24 @@
+# Run-only with 3s margin — sweet spot between boundary absorption and training distribution
+global:
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 42
+  output_dir: outputs/normal_loco
+  sampling_method: lhs
+  export_preset: rltracker
+  generate_margin: 3.0
+
+motion_types:
+  run:
+    description: "a robot runs"
+    duration: [5.0, 8.0]
+    vel_cmd:
+      vx: [0.80, 2.00]
+      vy: [-0.10, 0.10]
+      wz: [-0.15, 0.15]
+    torso_height: [0.60, 0.80]
+    styles:
+      - "normally"
+      - "steadily"
+    weight: 1.0
+    num_samples: 50

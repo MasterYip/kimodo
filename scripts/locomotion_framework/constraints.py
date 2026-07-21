@@ -18,6 +18,7 @@ from .sampler import SampledMotion
 
 # Constrain every Nth frame.  1 = every frame (densest), 5 = sparse.
 _CONSTRAINT_STRIDE = 3
+_TAIL_DENSE_SECONDS = 1.0   # last N seconds use stride=1 for tail stability
 
 
 def build_root2d_constraint(
@@ -26,6 +27,7 @@ def build_root2d_constraint(
     fps: int = 30,
     heading: float = 0.0,
     stride: int = _CONSTRAINT_STRIDE,
+    tail_dense_seconds: float = _TAIL_DENSE_SECONDS,
 ) -> dict:
     """Build a Root2D constraint from a velocity command.
 
@@ -34,11 +36,13 @@ def build_root2d_constraint(
     frame to the last, matching its training prior for walk/run/squat loops.
 
     Args:
-        vel:      {"vx": float, "vy": float, "wz": float}  body-frame
-        duration: motion duration in seconds.
-        fps:      frames per second.
-        heading:  initial world heading (radians).
-        stride:   constrain every ``stride``-th frame (1 = all frames).
+        vel:                {"vx": float, "vy": float, "wz": float}  body-frame
+        duration:           motion duration in seconds.
+        fps:                frames per second.
+        heading:            initial world heading (radians).
+        stride:             constrain every ``stride``-th frame (1 = all frames).
+        tail_dense_seconds: final N seconds use stride=1 to anchor the tail
+                            against temporal-boundary diffusion artifacts.
     """
     num_frames = int(duration * fps)
     dt = 1.0 / fps
@@ -82,13 +86,31 @@ def build_root2d_constraint(
             [np.cos(frame_headings), np.sin(frame_headings)], axis=-1
         ).astype(np.float32)
 
-    # ── Sparse frame selection ──────────────────────────────────────
+    # ── Graduated-density frame selection ────────────────────────────
+    # Sparse (stride=N) for body of clip → model freedom.
+    # Dense  (stride=1) for final tail_dense_seconds → anchor the tail
+    # against temporal-boundary diffusion artifacts.
     stride = max(1, stride)
-    constrain_indices = list(range(0, num_frames, stride))
+    tail_dense_frames = int(tail_dense_seconds * fps)
+    sparse_end = max(0, num_frames - tail_dense_frames)
+
+    # Sparse region: every stride-th frame
+    constrain_indices = list(range(0, sparse_end, stride))
+
+    # Dense tail region: every frame (stride=1)
+    if tail_dense_frames > 0:
+        tail_start = sparse_end
+        constrain_indices.extend(range(tail_start, num_frames))
+
+    # Deduplicate and sort
+    constrain_indices = sorted(set(constrain_indices))
 
     # Always include the first and last frame
+    if 0 not in constrain_indices:
+        constrain_indices.insert(0, 0)
     if constrain_indices[-1] != num_frames - 1:
         constrain_indices.append(num_frames - 1)
+    constrain_indices = sorted(set(constrain_indices))
 
     smooth_root_2d = np.stack([x, z], axis=-1).astype(np.float32)
     smooth_root_2d = smooth_root_2d[constrain_indices].tolist()
@@ -107,13 +129,30 @@ def build_root2d_constraint(
     return constraint
 
 
-def build_constraints_json(sample: SampledMotion, fps: int = 30) -> list[dict]:
-    """Build the full constraints list for a sampled motion."""
+def build_constraints_json(
+    sample: SampledMotion,
+    fps: int = 30,
+    duration_override: float | None = None,
+    stride: int | None = None,
+) -> list[dict]:
+    """Build the full constraints list for a sampled motion.
+
+    Args:
+        sample:            The sampled motion spec.
+        fps:               Frames per second.
+        duration_override: If set, build constraints for this duration
+                           instead of ``sample.duration`` (used for
+                           generate-and-truncate mode).
+        stride:            Override constraint stride (None = use default).
+                           stride=1 for dense, stride=3+ for sparse.
+    """
     constraints = []
+    duration = duration_override if duration_override is not None else sample.duration
+    kw = {"stride": stride} if stride is not None else {}
 
     if sample.vel and any(abs(v) > 1e-6 for v in sample.vel.values()):
         root_constraint = build_root2d_constraint(
-            sample.vel, sample.duration, fps=fps
+            sample.vel, duration, fps=fps, **kw
         )
         constraints.append(root_constraint)
 

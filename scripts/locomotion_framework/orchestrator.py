@@ -183,10 +183,13 @@ def run_generation(
         # Use the first sample's prompt as base; variations come from diffusion
         # Generate: per-sample prompts, frames, constraints via list API
         base_prompt = samples[0].prompt  # for display only
-        num_frames = int(samples[0].duration * config.global_.fps)  # for display
+        margin = config.global_.generate_margin
+        gen_duration = samples[0].duration + margin
+        num_frames = int(gen_duration * config.global_.fps)
 
         print(f"  Prompt:  {base_prompt}")
-        print(f"  Frames:  {num_frames} ({samples[0].duration:.1f}s)")
+        print(f"  Dur:     {samples[0].duration:.1f}s effective + {margin:.1f}s margin → "
+              f"{gen_duration:.1f}s generated, {num_frames}f")
         print(f"  Constraint per sample (e.g.): vx={samples[0].vel.get('vx',0):.2f} "
               f"vy={samples[0].vel.get('vy',0):.2f} wz={samples[0].vel.get('wz',0):.2f}")
         print(f"  Per-sample mode: {n} unique constraints + prompts + durations")
@@ -229,6 +232,11 @@ def _generate_batch(
     duration and Root2D path — the velocity distribution from the sampler
     actually takes effect.
 
+    **Truncation**: Motions are generated ``generate_margin`` seconds longer
+    than requested, then the first and last ``margin/2`` seconds are truncated.
+    This discards temporal-boundary diffusion artifacts while keeping the
+    clean middle portion.
+
     Args:
         preset: "kimodo" for default NPZ+CSV output, "rltracker" for
                 RLTracker dataset format (flat dirs with motion.npz).
@@ -246,6 +254,10 @@ def _generate_batch(
     n = len(samples)
     fps = config.global_.fps
     seed_val = config.global_.seed if config.global_.seed is not None else 0
+    margin = config.global_.generate_margin
+    margin_frames = int(round(margin * fps))
+    trim_start = margin_frames // 2   # frames to drop from each end
+    trim_end = -(trim_start) if trim_start > 0 else None
 
     # ── Build per-sample lists (the key fix) ─────────────────────────
     per_prompts: list[str] = []
@@ -253,10 +265,11 @@ def _generate_batch(
     per_constraints_raw: list[list[dict]] = []
 
     for s in samples:
+        gen_duration = s.duration + margin
         per_prompts.append(s.prompt)
-        per_frames.append(int(s.duration * fps))
+        per_frames.append(int(round(gen_duration * fps)))
         per_constraints_raw.append(
-            build_constraints_json(s, fps=fps)
+            build_constraints_json(s, fps=fps, duration_override=gen_duration)
         )
 
     # Convert to Kimodo constraint objects
@@ -281,13 +294,17 @@ def _generate_batch(
         return_numpy=True,
     )
 
-    # ── Export per-sample ─────────────────────────────────────────────
+    # ── Truncate & export per-sample ───────────────────────────────────
     for i, sample in enumerate(samples):
         single = {
             k: (v[i] if hasattr(v, "shape") and len(v.shape) > 0
                 and v.shape[0] == n else v)
             for k, v in output.items()
         }
+
+        # Drop temporal boundary artifacts
+        if margin > 0 and trim_start > 0:
+            single = _trim_motion(single, trim_start, trim_end)
 
         if preset == "rltracker":
             _export_rltracker(
@@ -317,6 +334,45 @@ def _generate_batch(
         torch.cuda.empty_cache()
     except ImportError:
         pass
+
+
+def _trim_motion(single: dict, start: int, end: int | None) -> dict:
+    """Slice the temporal dimension of every array in ``single``.
+
+    Args:
+        single: Per-sample motion dict.
+        start:  Frames to drop from the beginning.
+        end:    Frames to drop from the end (negative index or None).
+
+    Returns:
+        A new dict with truncated arrays.  Scalars and arrays whose
+        first dimension doesn't match are passed through unchanged.
+    """
+    import numpy as np
+
+    trimmed = {}
+    # Determine the expected temporal length from root_positions
+    ref_len = 0
+    for k in ("root_positions", "posed_joints", "joint_pos"):
+        arr = single.get(k)
+        if arr is not None and hasattr(arr, "shape") and len(arr.shape) >= 1:
+            ref_len = arr.shape[0]
+            break
+
+    for k, v in single.items():
+        if v is None:
+            trimmed[k] = v
+            continue
+        arr = np.asarray(v)
+        if len(arr.shape) >= 1 and arr.shape[0] == ref_len:
+            if end is not None:
+                trimmed[k] = arr[start:end].copy()
+            else:
+                trimmed[k] = arr[start:].copy()
+        else:
+            trimmed[k] = arr
+
+    return trimmed
 
 
 def _export_kimodo(

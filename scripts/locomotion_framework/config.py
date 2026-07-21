@@ -46,6 +46,7 @@ class GlobalConfig:
     fps: int = 30
     sampling_method: str = "uniform"  # "uniform" or "lhs"
     export_preset: str = "kimodo"     # "kimodo" (default NPZ+CSV) or "rltracker"
+    generate_margin: float = 2.0      # extra seconds generated then truncated (1s each end)
 
 
 @dataclass
@@ -86,6 +87,7 @@ def load_config(path: str | Path) -> LocomotionConfig:
         fps=global_raw.get("fps", 30),
         sampling_method=global_raw.get("sampling_method", "uniform"),
         export_preset=global_raw.get("export_preset", "kimodo"),
+        generate_margin=global_raw.get("generate_margin", 2.0),
     )
 
     motion_types = {}

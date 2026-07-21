@@ -133,6 +133,30 @@ def jitter_score(vel: np.ndarray) -> float:
     return float(np.sqrt(np.mean((vel - smooth) ** 2)))
 
 
+def _save_test_npz(
+    test_name: str,
+    approach: str,
+    full_output: dict,
+    output_base: str,
+) -> str:
+    """Save a test motion as Kimodo NPZ for the Viser web GUI."""
+    out_dir = os.path.join(output_base, f"{test_name}__{approach}")
+    os.makedirs(out_dir, exist_ok=True)
+    npz_path = os.path.join(out_dir, "motion.npz")
+
+    # Save Kimodo format: posed_joints, global_rot_mats, local_rot_mats,
+    # root_positions, foot_contacts (optional)
+    save_data = {}
+    for key in ("posed_joints", "global_rot_mats", "local_rot_mats",
+                "root_positions", "foot_contacts"):
+        val = full_output.get(key)
+        if val is not None:
+            save_data[key] = np.asarray(val).astype(np.float32)
+
+    np.savez_compressed(npz_path, **save_data)
+    return npz_path
+
+
 def analyze(name: str, body_pos_w: np.ndarray, fps: float) -> dict:
     """Compute standard quality metrics."""
     vel = compute_velocity(body_pos_w, fps)
@@ -235,6 +259,9 @@ def main():
         elapsed = time.time() - t0
 
         posed_dense = np.asarray(output["posed_joints"][0])
+        # Save for web GUI visualization
+        dense_single = {k: (v[0] if hasattr(v, "shape") and v.ndim > 0 and v.shape[0] == 1 else v) for k, v in output.items()}
+        _save_test_npz(tc['name'], "A_dense", dense_single, OUTPUT_BASE)
         result_a = analyze(f"{tc['name']}_dense", posed_dense, FPS)
         result_a["approach"] = "dense (stride=1)"
         result_a["constraint_frames"] = dense_frames
@@ -261,6 +288,11 @@ def main():
 
         posed_sparse = np.asarray(output_b["posed_joints"][0])
         posed_proj = project_root_to_path(posed_sparse, root_idx, vel, FPS)
+        # Save for web GUI (with projected joints)
+        proj_single = {k: (v[0] if hasattr(v, "shape") and v.ndim > 0 and v.shape[0] == 1 else v) for k, v in output_b.items()}
+        proj_single["posed_joints"] = posed_proj
+        proj_single["root_positions"] = posed_proj[:, root_idx, :].copy()
+        _save_test_npz(tc['name'], "B_sparse_proj", proj_single, OUTPUT_BASE)
         result_b = analyze(f"{tc['name']}_sparse+proj", posed_proj, FPS)
         result_b["approach"] = "sparse (stride=3) + projection"
         result_b["constraint_frames"] = sparse_frames

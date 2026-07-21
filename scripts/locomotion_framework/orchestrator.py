@@ -183,13 +183,10 @@ def run_generation(
         # Use the first sample's prompt as base; variations come from diffusion
         # Generate: per-sample prompts, frames, constraints via list API
         base_prompt = samples[0].prompt  # for display only
-        margin = config.global_.generate_margin
-        gen_duration = samples[0].duration + margin
-        num_frames = int(gen_duration * config.global_.fps)
+        num_frames = int(samples[0].duration * config.global_.fps)
 
         print(f"  Prompt:  {base_prompt}")
-        print(f"  Dur:     {samples[0].duration:.1f}s effective + {margin:.1f}s margin → "
-              f"{gen_duration:.1f}s generated, {num_frames}f")
+        print(f"  Dur:     {samples[0].duration:.1f}s, {num_frames}f")
         print(f"  Constraint per sample (e.g.): vx={samples[0].vel.get('vx',0):.2f} "
               f"vy={samples[0].vel.get('vy',0):.2f} wz={samples[0].vel.get('wz',0):.2f}")
         print(f"  Per-sample mode: {n} unique constraints + prompts + durations")
@@ -232,10 +229,10 @@ def _generate_batch(
     duration and Root2D path — the velocity distribution from the sampler
     actually takes effect.
 
-    **Truncation**: Motions are generated ``generate_margin`` seconds longer
-    than requested, then the first and last ``margin/2`` seconds are truncated.
-    This discards temporal-boundary diffusion artifacts while keeping the
-    clean middle portion.
+    Uses the demo ``05_root_path`` method: dense stride=1 constraints,
+    exact-duration generation (no margin/truncation).  The diffusion model
+    with dense inpainting at every DDIM step produces clean motions without
+    tail jitter — no post-processing needed.
 
     Args:
         preset: "kimodo" for default NPZ+CSV output, "rltracker" for
@@ -254,22 +251,17 @@ def _generate_batch(
     n = len(samples)
     fps = config.global_.fps
     seed_val = config.global_.seed if config.global_.seed is not None else 0
-    margin = config.global_.generate_margin
-    margin_frames = int(round(margin * fps))
-    trim_start = margin_frames // 2   # frames to drop from each end
-    trim_end = -(trim_start) if trim_start > 0 else None
 
-    # ── Build per-sample lists (the key fix) ─────────────────────────
+    # ── Build per-sample lists (demo 05_root_path method) ────────────
     per_prompts: list[str] = []
     per_frames: list[int] = []
     per_constraints_raw: list[list[dict]] = []
 
     for s in samples:
-        gen_duration = s.duration + margin
         per_prompts.append(s.prompt)
-        per_frames.append(int(round(gen_duration * fps)))
+        per_frames.append(int(round(s.duration * fps)))
         per_constraints_raw.append(
-            build_constraints_json(s, fps=fps, duration_override=gen_duration)
+            build_constraints_json(s, fps=fps)
         )
 
     # Convert to Kimodo constraint objects
@@ -294,7 +286,7 @@ def _generate_batch(
         return_numpy=True,
     )
 
-    # ── Truncate & export per-sample ───────────────────────────────────
+    # ── Export per-sample (trim to actual duration — model pads to max in batch) ──
     for i, sample in enumerate(samples):
         single = {
             k: (v[i] if hasattr(v, "shape") and len(v.shape) > 0
@@ -302,9 +294,15 @@ def _generate_batch(
             for k, v in output.items()
         }
 
-        # Drop temporal boundary artifacts
-        if margin > 0 and trim_start > 0:
-            single = _trim_motion(single, trim_start, trim_end)
+        # Trim to actual sample duration (model pads all samples to max_frames)
+        actual_frames = int(round(sample.duration * fps))
+        for k in list(single.keys()):
+            arr = single[k]
+            if arr is None:
+                continue
+            arr = np.asarray(arr)
+            if arr.ndim >= 1 and arr.shape[0] > actual_frames:
+                single[k] = arr[:actual_frames].copy()
 
         if preset == "rltracker":
             _export_rltracker(

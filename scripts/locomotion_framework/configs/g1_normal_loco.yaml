@@ -24,12 +24,12 @@ global:
   output_dir: outputs/normal_loco
   sampling_method: lhs   # Latin Hypercube Sampling for coverage
   export_preset: rltracker  # RLTracker dataset format (flat dirs, motion.npz)
-  generate_margin: 2.0   # generate +2s then trim 1s each end (proven across all types)
+  # generate_margin removed — demo 05_root_path method uses exact-duration generation
 
 motion_types:
   # ── Walk — all directions, all turning rates ───────────────────
   walk:
-    description: "a person walks"
+    description: "a robot walks"
     duration: [5.0, 8.0]
     vel_cmd:
       # forward (+) / backward (-), full walking speed range
@@ -47,7 +47,7 @@ motion_types:
 
   # ── Run — forward only ─────────────────────────────────────────
   run:
-    description: "a person runs"
+    description: "a robot runs"
     duration: [5.0, 8.0]
     vel_cmd:
       vx: [0.80, 2.00]
@@ -62,7 +62,7 @@ motion_types:
 
   # ── Stand ──────────────────────────────────────────────────────
   stand:
-    description: "a person stands still"
+    description: "a robot stands still"
     duration: [5.0, 8.0]
     vel_cmd:
       vx: [-0.02, 0.02]
@@ -77,7 +77,7 @@ motion_types:
 
   # ── Squat ──────────────────────────────────────────────────────
   squat_move:
-    description: "a person squats and moves"
+    description: "a robot squats and moves"
     duration: [5.0, 8.0]
     vel_cmd:
       vx: [-0.20, 0.30]

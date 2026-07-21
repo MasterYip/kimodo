@@ -46,7 +46,7 @@ class GlobalConfig:
     fps: int = 30
     sampling_method: str = "uniform"  # "uniform" or "lhs"
     export_preset: str = "kimodo"     # "kimodo" (default NPZ+CSV) or "rltracker"
-    generate_margin: float = 2.0      # extra seconds generated then truncated (1s each end)
+    generate_margin: float = 0.0      # DEPRECATED: demo method uses exact duration, no margin
 
 
 @dataclass

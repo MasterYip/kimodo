@@ -254,8 +254,8 @@ class LocoEditor:
                     s.character.set_skinned_mesh_opacity(event.target.value)
 
         # Keyboard controls
-        @client.on_keyboard
-        def _(event: viser.SceneEvent) -> None:
+        @client.scene.on_keyboard_event("keydown", debounce_ms=100)
+        def _(event: viser.KeyboardEvent) -> None:
             key = event.key
             if key == " ":
                 s.playing = not s.playing
@@ -386,6 +386,8 @@ class LocoEditor:
     def _on_load_yaml(self, path: str) -> None:
         """Load YAML from a server file path."""
         client = self.client
+        if not path:
+            return  # "(none)" selected or empty
         try:
             if not os.path.exists(path):
                 if client is not None:

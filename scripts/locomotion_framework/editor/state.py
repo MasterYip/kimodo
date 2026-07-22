@@ -58,6 +58,14 @@ class EditorState:
     gui_play_button: Any = None
     gui_output_dir_text: Any = None
     gui_total_motions_text: Any = None
+    gui_preset_dropdown: Any = None
+    gui_panel_width_dropdown: Any = None
+    gui_config_md: Any = None
     gui_yaml_path_text: Any = None
     gui_load_button: Any = None
     gui_save_button: Any = None
+
+    # Persistent panel handles (for tear-down / recreate pattern)
+    global_widgets: Any = None            # dict[str, GuiHandle]
+    motion_type_widgets: Any = None       # list[MotionTypeWidgets]
+    motion_types_folder: Any = None       # GuiFolderHandle

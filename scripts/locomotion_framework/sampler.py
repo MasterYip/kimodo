@@ -25,6 +25,35 @@ class SampledMotion:
     diffusion_steps: int
 
 
+def _sort_key_for(sample: SampledMotion, by: str) -> float:
+    """Return a scalar sort key for a sampled motion.
+
+    Args:
+        sample: A SampledMotion instance.
+        by: Sort dimension — "vx", "vy", "wz", "speed" (|v|),
+            "torso", or "duration".
+
+    Returns:
+        Float sort key (lower = earlier).
+    """
+    if by == "vx":
+        return sample.vel.get("vx", 0.0)
+    elif by == "vy":
+        return sample.vel.get("vy", 0.0)
+    elif by == "wz":
+        return sample.vel.get("wz", 0.0)
+    elif by == "speed":
+        vx = sample.vel.get("vx", 0.0)
+        vy = sample.vel.get("vy", 0.0)
+        return (vx ** 2 + vy ** 2) ** 0.5
+    elif by == "torso":
+        return sample.torso_height
+    elif by == "duration":
+        return sample.duration
+    else:
+        return 0.0
+
+
 def lhs_sample(rng: np.random.RandomState, ranges: list[tuple[float, float]], n: int) -> np.ndarray:
     """Latin Hypercube Sampling over D continuous dimensions.
 
@@ -163,11 +192,15 @@ class MotionSampler:
         idx = self.rng.choice(len(self._specs), p=probs)
         return self._specs[idx]
 
-    def generate_batch_specs(self, method: str = "uniform") -> dict[str, list[SampledMotion]]:
+    def generate_batch_specs(self, method: str = "uniform",
+                             rerank: str = "") -> dict[str, list[SampledMotion]]:
         """For each motion type, sample ``num_samples`` motions.
 
         Args:
             method: "uniform" (default) or "lhs" (Latin Hypercube Sampling).
+            rerank: If set, sort samples within each type by this dimension
+                    before returning ("vx", "vy", "wz", "speed", "torso",
+                    "duration").  Empty string = no sort (random order).
 
         Returns:
             Dict mapping type_name → list of SampledMotion objects.
@@ -178,14 +211,25 @@ class MotionSampler:
                 batch[spec.name] = _lhs_sample_from_spec(self.rng, spec)
             else:
                 batch[spec.name] = [self.sample_params(spec) for _ in range(spec.num_samples)]
+
+            # Rerank: sort samples within this type for regularised output
+            if rerank:
+                batch[spec.name] = sorted(
+                    batch[spec.name],
+                    key=lambda s: _sort_key_for(s, rerank),
+                )
+
         return batch
 
-    def generate_random_specs(self, total: int, method: str = "uniform") -> list[SampledMotion]:
+    def generate_random_specs(self, total: int, method: str = "uniform",
+                              rerank: str = "") -> list[SampledMotion]:
         """Generate ``total`` motions by randomly selecting types (weighted).
 
         Args:
             total: number of motions desired.
             method: "uniform" (default) or "lhs".
+            rerank: If set, sort samples within each type by this dimension
+                    before returning.
 
         Returns:
             Flat list of SampledMotion objects.
@@ -215,7 +259,13 @@ class MotionSampler:
                     diffusion_steps=spec.diffusion_steps,
                 )
                 results.extend(_lhs_sample_from_spec(self.rng, spec_copy))
-            self.rng.shuffle(results)
+
+            # Rerank within each type group, keep type groups ordered
+            if rerank:
+                results.sort(key=lambda s: (s.motion_type, _sort_key_for(s, rerank)))
+            else:
+                self.rng.shuffle(results)
+
             return results
 
         specs = []

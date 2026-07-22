@@ -14,6 +14,7 @@ global:
   seed: 42
   output_dir: outputs/debug_squat_height
   sampling_method: lhs
+  rerank: speed
   export_preset: rltracker
 
 motion_types:

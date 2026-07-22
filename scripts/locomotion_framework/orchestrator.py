@@ -117,7 +117,7 @@ def run_generation(
 
     # Generate batch specs
     method = config.global_.sampling_method
-    batch_specs = sampler.generate_batch_specs(method=method)
+    batch_specs = sampler.generate_batch_specs(method=method, rerank=config.global_.rerank)
     total_motions = sum(len(s) for s in batch_specs.values())
     print(f"=== Locomotion Batch Generation ===")
     print(f"Model: {config.global_.model} | Sampling: {method} | Preset: {preset}")
@@ -508,7 +508,7 @@ def main():
     if args.num_total is not None:
         sampler = MotionSampler(config, seed=config.global_.seed)
         method = config.global_.sampling_method
-        all_samples = sampler.generate_random_specs(args.num_total, method=method)
+        all_samples = sampler.generate_random_specs(args.num_total, method=method, rerank=config.global_.rerank)
 
         print(f"=== Random Sample Mode (method={method}, preset={preset}) ===")
         print(f"Total: {args.num_total} motions across "

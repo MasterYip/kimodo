@@ -47,6 +47,8 @@ class GlobalConfig:
     sampling_method: str = "uniform"  # "uniform" or "lhs"
     export_preset: str = "kimodo"     # "kimodo" (default NPZ+CSV) or "rltracker"
     generate_margin: float = 0.0      # DEPRECATED: demo method uses exact duration, no margin
+    rerank: str = ""                  # sort samples before generation: "vx", "vy", "wz",
+                                      #   "speed" (|v|), "torso", "duration", or "" (no sort)
 
 
 @dataclass
@@ -88,6 +90,7 @@ def load_config(path: str | Path) -> LocomotionConfig:
         sampling_method=global_raw.get("sampling_method", "uniform"),
         export_preset=global_raw.get("export_preset", "kimodo"),
         generate_margin=global_raw.get("generate_margin", 2.0),
+        rerank=global_raw.get("rerank", ""),
     )
 
     motion_types = {}

@@ -23,6 +23,7 @@ global:
   seed: 42
   output_dir: outputs/normal_loco
   sampling_method: lhs   # Latin Hypercube Sampling for coverage
+  rerank: speed
   export_preset: rltracker  # RLTracker dataset format (flat dirs, motion.npz)
   # generate_margin removed — demo 05_root_path method uses exact-duration generation
 

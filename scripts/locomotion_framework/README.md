@@ -31,6 +31,60 @@ PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
 
 ---
 
+## Loco Editor — Interactive Web GUI
+
+The framework includes a Viser-based web GUI that combines config editing,
+batch generation, and 3D visualization in a single browser tab — dramatically
+faster than the edit-YAML → SSH → generate → SCP → visualize cycle.
+
+### Launch
+
+```bash
+cd /data/masteryip/kimodo/kimodo
+source scripts/env.sh
+
+# Default: kimodo-g1-rp on port 7861
+bash scripts/launch_loco_editor.sh
+
+# Custom model and port
+bash scripts/launch_loco_editor.sh kimodo-g1-rp 7861
+
+# With initial YAML config
+bash scripts/launch_loco_editor.sh kimodo-g1-rp 7861 \
+    scripts/locomotion_framework/configs/g1_normal_loco.yaml
+```
+
+### Access
+
+```bash
+ssh -L 7861:127.0.0.1:7861 user@<server-ip> -p 22222 -N
+# Open http://127.0.0.1:7861
+```
+
+### Tabs
+
+| Tab | What It Does |
+|-----|-------------|
+| **Config** | Global settings (model, seed, sampling, rerank, export preset). Per-motion-type fine-grained controls (description, velocity ranges, torso height, styles, weight, num samples). Load/save YAML from server paths. Config summary table. |
+| **Generate** | One-click batch generation with progress bar and per-type logging. Stop button for cancellation. ZIP download of last output. |
+| **Visualize** | 3D robot playback with play/pause, frame slider, speed control. Sample navigator (prev/next through generated motions). Mesh/skeleton visibility, dark mode, camera presets. |
+
+### Architecture
+
+```
+locomotion_framework/editor/
+├── __init__.py          → Entry point, argparse
+├── __main__.py          → python -m support
+├── app.py               → LocoEditor: ViserServer, model loading, playback loop
+├── state.py             → EditorState dataclass
+├── serializers.py       → YAML ↔ LocomotionConfig, config summary
+├── panels.py            → All viser GUI panels (3 tabs)
+├── scene_utils.py       → 3D scene, character, camera presets
+└── generation.py        → In-process generation pipeline
+```
+
+---
+
 ## Distributed Multi-GPU Generation
 
 For large datasets, generation can be split across multiple GPUs to cut
@@ -114,6 +168,12 @@ locomotion_framework/
 ├── run_full.sh                ← Full 200-motion preset launcher
 ├── run_distributed.sh         ← Multi-GPU distributed launcher
 ├── analyze_quality.py         ← Post-generation quality analysis
+├── editor/                    ← Interactive Viser web GUI
+│   ├── app.py                 ← Server, model loading, playback
+│   ├── panels.py              ← Config/Generate/Visualize tabs
+│   ├── generation.py          ← In-process generation pipeline
+│   ├── state.py / serializers.py / scene_utils.py
+│   └── __init__.py / __main__.py
 └── README.md
 ```
 

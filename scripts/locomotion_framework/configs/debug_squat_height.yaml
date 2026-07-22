@@ -1,7 +1,7 @@
 # =============================================================================
 # DEBUG: Squat torso_height sweep — find the range where robot stays upright
 #
-# Tests a person crouch moving across 5 torso_height bands.
+# Tests a person walking across 5 torso_height bands.
 # Each band = 5 motions, 5 bands = 25 total.
 #
 # The goal: determine which torso_height range keeps the robot upright
@@ -20,75 +20,75 @@ global:
 motion_types:
   # Band 1: very low crouch (original problematic range)
   squat_h045_055:
-    description: a person crouch moving
+    description: a person walking
     duration: [5.0, 8.0]
     vel_cmd:
       vx: [-0.20, 0.30]
       vy: [-0.10, 0.10]
       wz: [-0.20, 0.20]
-    torso_height: [0.45, 0.55]
+    torso_height: [0.50, 0.55]
     styles:
-      - normally
-      - while staying low
-    weight: 0.2
+      - "normally"
+      - "at a steady pace"
+    weight: 0.50
     num_samples: 20
 
   # Band 2: low crouch
   squat_h055_065:
-    description: a person crouch moving
+    description: a person walking
     duration: [5.0, 8.0]
     vel_cmd:
       vx: [-0.20, 0.30]
       vy: [-0.10, 0.10]
       wz: [-0.20, 0.20]
-    torso_height: [0.55, 0.65]
+    torso_height: [0.55, 0.60]
     styles:
-      - normally
-      - while staying low
-    weight: 0.2
+      - "normally"
+      - "at a steady pace"
+    weight: 0.50
     num_samples: 20
 
   # Band 3: borderline (current config range)
   squat_h060_070:
-    description: a person crouch moving
+    description: a person walking
     duration: [5.0, 8.0]
     vel_cmd:
       vx: [-0.20, 0.30]
       vy: [-0.10, 0.10]
       wz: [-0.20, 0.20]
-    torso_height: [0.60, 0.70]
+    torso_height: [0.60, 0.65]
     styles:
-      - normally
-      - while staying low
-    weight: 0.2
+      - "normally"
+      - "at a steady pace"
+    weight: 0.50
     num_samples: 20
 
   # Band 4: mild crouch
   squat_h065_075:
-    description: a person crouch moving
+    description: a person walking
     duration: [5.0, 8.0]
     vel_cmd:
       vx: [-0.20, 0.30]
       vy: [-0.10, 0.10]
       wz: [-0.20, 0.20]
-    torso_height: [0.65, 0.75]
+    torso_height: [0.65, 0.70]
     styles:
-      - normally
-      - while staying low
-    weight: 0.2
+      - "normally"
+      - "at a steady pace"
+    weight: 0.50
     num_samples: 20
 
   # Band 5: near-normal (walk-like)
   squat_h070_085:
-    description: a person crouch moving
+    description: a person walking
     duration: [5.0, 8.0]
     vel_cmd:
       vx: [-0.20, 0.30]
       vy: [-0.10, 0.10]
       wz: [-0.20, 0.20]
-    torso_height: [0.70, 0.85]
+    torso_height: [0.70, 0.80]
     styles:
-      - normally
-      - while staying low
-    weight: 0.2
+      - "normally"
+      - "at a steady pace"
+    weight: 0.50
     num_samples: 20

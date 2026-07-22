@@ -53,7 +53,7 @@ motion_types:
       vx: [-1.0, 2.00]
       vy: [-1.0, 1.00]
       wz: [-0.5, 0.5]
-    torso_height: [0.60, 0.80]
+    torso_height: [0.65, 0.80]
     styles:
       - "normally"
       - "steadily"
@@ -83,7 +83,7 @@ motion_types:
       vx: [-0.20, 0.30]
       vy: [-0.10, 0.10]
       wz: [-0.20, 0.20]
-    torso_height: [0.5, 0.7]
+    torso_height: [0.55, 0.7]
     styles:
       - "normally"
       - "while staying low"

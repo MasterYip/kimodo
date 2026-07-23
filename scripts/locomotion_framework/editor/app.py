@@ -80,7 +80,6 @@ class LocoEditor:
     ):
         self.model_name = model_name
         self.port = port
-        self.device = "cuda:0"
 
         # State
         self.state = EditorState()
@@ -102,6 +101,10 @@ class LocoEditor:
             default_yaml = make_default_yaml()
             self.state.config = yaml_str_to_config(default_yaml)
             self.state.config_yaml = default_yaml
+
+        # Resolve GPU device from config
+        g = self.state.config.global_
+        self.state.device = f"cuda:{g.gpu}" if g.gpu is not None else "cuda:0"
 
         # Model
         self.model = None
@@ -201,14 +204,16 @@ class LocoEditor:
     def _load_model(self) -> None:
         """Load the Kimodo model and extract skeleton + fps.
 
+        Uses state.device so the GPU can be changed via the Config tab GUI.
         Pattern from Demo.load_model.
         """
         from kimodo import load_model as kimodo_load
 
-        print(f"Loading model: {self.model_name} ...")
+        device = self.state.device
+        print(f"Loading model: {self.model_name} on {device} ...")
         model, resolved = kimodo_load(
             self.model_name,
-            device=self.device,
+            device=device,
             return_resolved_name=True,
         )
         self.model = model
@@ -514,9 +519,14 @@ class LocoEditor:
             print("[DEBUG] _on_generate: config is None, returning", flush=True)
             return
 
+        # Resolve GPU device from config (may differ from current state if user changed it)
+        g = config.global_
+        device = f"cuda:{g.gpu}" if g.gpu is not None else "cuda:0"
+        self.state.device = device
+
         total = compute_total_motions(config)
-        print(f"[DEBUG] _on_generate: total={total}, starting thread", flush=True)
-        output_base = config.global_.output_dir
+        print(f"[DEBUG] _on_generate: total={total}, device={device}, starting thread", flush=True)
+        output_base = g.output_dir
 
         # Start generation in background thread
         self._stop_event = threading.Event()
@@ -547,7 +557,7 @@ class LocoEditor:
                     output_base=output_base,
                     progress_callback=self._on_progress,
                     stop_event=self._stop_event,
-                    device=self.device,
+                    device=self.state.device,
                     return_tensors=True,
                 )
 
@@ -687,7 +697,7 @@ class LocoEditor:
         print(f"\n{'='*60}")
         print(f"Loco Editor running at http://127.0.0.1:{self.port}")
         print(f"Model: {self.model_name}")
-        print(f"GPU:  {self.device}")
+        print(f"GPU:  {self.state.device}")
         print(f"{'='*60}\n")
         print("Access from your machine:")
         print(f"  ssh -L {self.port}:127.0.0.1:{self.port} user@<server-ip> -p 22222 -N")

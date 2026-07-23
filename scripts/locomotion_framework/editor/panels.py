@@ -105,6 +105,8 @@ def repopulate_from_config(state: Any, client: viser.ClientHandle) -> None:
         gw["export_preset"].value = g.export_preset
     if gw.get("diffusion_steps") is not None:
         gw["diffusion_steps"].value = g.diffusion_steps
+    if gw.get("gpu") is not None:
+        gw["gpu"].value = f"cuda:{g.gpu}" if g.gpu is not None else "cuda:0"
     if gw.get("output_dir") is not None:
         gw["output_dir"].value = g.output_dir
 
@@ -155,6 +157,19 @@ def flush_widgets_to_config(state: Any) -> None:
         g.rerank = gw["rerank"].value
     if gw.get("export_preset") is not None:
         g.export_preset = gw["export_preset"].value
+    if gw.get("gpu") is not None:
+        try:
+            raw = gw["gpu"].value.strip()
+            # Accept "cuda:0", "0", "cuda0", etc.
+            raw = raw.replace("cuda:", "").replace("cuda", "").strip()
+            g.gpu = int(raw)
+        except (ValueError, AttributeError) as e:
+            print(f"[WARN] Invalid GPU value '{gw['gpu'].value}': {e}. Using cuda:0.", flush=True)
+            g.gpu = 0
+            try:
+                gw["gpu"].value = "cuda:0"
+            except Exception:
+                pass
     if gw.get("diffusion_steps") is not None:
         g.diffusion_steps = gw["diffusion_steps"].value
     if gw.get("output_dir") is not None:
@@ -295,6 +310,10 @@ def _build_config_tab(
             initial_value=g.export_preset if g else "rltracker",
             hint="rltracker = flat dirs, kimodo = per-type dirs"
         )
+        gw["gpu"] = client.gui.add_text(
+            "GPU", initial_value=f"cuda:{g.gpu}" if g and g.gpu is not None else "cuda:0",
+            hint="CUDA device for model + generation. Single GPU only (e.g. cuda:0, cuda:5). For multi-GPU, use run_distributed.sh on server."
+        )
         gw["diffusion_steps"] = client.gui.add_slider(
             "Diffusion Steps", min=10, max=500, step=10,
             initial_value=g.diffusion_steps if g else 100,
@@ -365,6 +384,8 @@ def _on_parse_yaml(state: Any) -> None:
             gw["export_preset"].value = g.export_preset
         if gw.get("diffusion_steps") is not None:
             gw["diffusion_steps"].value = g.diffusion_steps
+        if gw.get("gpu") is not None:
+            gw["gpu"].value = f"cuda:{g.gpu}" if g.gpu is not None else "cuda:0"
         if gw.get("output_dir") is not None:
             gw["output_dir"].value = g.output_dir
 

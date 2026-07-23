@@ -14,6 +14,7 @@ class EditorState:
 
     # Model
     skeleton: Any = None
+    device: str = "cuda:0"  # GPU device for model + generation
 
     # 3D scene — multi-character grid (like demo's session.motions)
     characters: dict[str, Any] = field(default_factory=dict)   # name -> Character

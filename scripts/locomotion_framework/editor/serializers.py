@@ -17,15 +17,8 @@ from locomotion_framework.config import (
 # ── Default YAML ───────────────────────────────────────────────────
 
 def make_default_yaml() -> str:
-    """Return a minimal default YAML config string."""
-    return """global:
-  model: kimodo-g1-rp
-  diffusion_steps: 100
-  seed: 42
-  output_dir: outputs/loco_editor
-  sampling_method: uniform
-  export_preset: rltracker
-  rerank: ""
+    """Return a minimal default YAML config string (motion types only)."""
+    return """motion_types:
 
 motion_types:
   walk:
@@ -59,22 +52,30 @@ motion_types:
 
 # ── Config → YAML ──────────────────────────────────────────────────
 
-def config_to_yaml_str(config: LocomotionConfig) -> str:
-    """Serialize a LocomotionConfig to a YAML string."""
+def config_to_yaml_str(config: LocomotionConfig, motion_types_only: bool = True) -> str:
+    """Serialize a LocomotionConfig to a YAML string.
+
+    Args:
+        config: The locomotion config.
+        motion_types_only: If True, only serialize motion_types (no global section).
+                           Global settings are managed by separate widgets.
+    """
     buf = io.StringIO()
 
-    # Global section
-    g = config.global_
-    buf.write("global:\n")
-    buf.write(f"  model: {g.model}\n")
-    buf.write(f"  diffusion_steps: {g.diffusion_steps}\n")
-    if g.seed is not None:
-        buf.write(f"  seed: {g.seed}\n")
-    buf.write(f"  output_dir: {g.output_dir}\n")
-    buf.write(f"  sampling_method: {g.sampling_method}\n")
-    buf.write(f"  export_preset: {g.export_preset}\n")
-    buf.write(f"  rerank: \"{g.rerank}\"\n")
-    buf.write("\n")
+    # Global section (only in full-serialization mode, e.g. save to file)
+    if not motion_types_only:
+        g = config.global_
+        buf.write("global:\n")
+        buf.write(f"  model: {g.model}\n")
+        buf.write(f"  diffusion_steps: {g.diffusion_steps}\n")
+        if g.seed is not None:
+            buf.write(f"  seed: {g.seed}\n")
+        buf.write(f"  output_dir: {g.output_dir}\n")
+        buf.write(f"  sampling_method: {g.sampling_method}\n")
+        buf.write(f"  export_preset: {g.export_preset}\n")
+        buf.write(f"  rerank: \"{g.rerank}\"\n")
+        buf.write(f"  gpu: {g.gpu}\n")
+        buf.write("\n")
 
     # Motion types
     buf.write("motion_types:\n")
@@ -100,22 +101,54 @@ def config_to_yaml_str(config: LocomotionConfig) -> str:
 
 # ── YAML → Config ──────────────────────────────────────────────────
 
-def yaml_str_to_config(yaml_str: str) -> LocomotionConfig:
-    """Deserialize a YAML string into a LocomotionConfig."""
+def yaml_str_to_config(yaml_str: str, base_global: GlobalConfig | None = None) -> LocomotionConfig:
+    """Deserialize a YAML string into a LocomotionConfig.
+
+    Args:
+        yaml_str: YAML with optional 'global:' and required 'motion_types:' sections.
+        base_global: If provided, merge YAML global settings into this base.
+                     If None, uses defaults for any missing global fields.
+                     Motion types in the YAML always fully replace.
+    """
     raw = yaml.safe_load(yaml_str)
 
-    global_raw = raw.get("global", {})
-    global_config = GlobalConfig(
-        model=global_raw.get("model", "kimodo-g1-rp"),
-        diffusion_steps=global_raw.get("diffusion_steps", 100),
-        seed=global_raw.get("seed"),
-        output_dir=global_raw.get("output_dir", "outputs/loco_editor"),
-        gpu=global_raw.get("gpu", 0),
-        fps=global_raw.get("fps", 30),
-        sampling_method=global_raw.get("sampling_method", "uniform"),
-        export_preset=global_raw.get("export_preset", "kimodo"),
-        rerank=global_raw.get("rerank", ""),
-    )
+    # Global: use base_global if provided, otherwise parse from YAML or defaults
+    if base_global is not None:
+        global_config = base_global
+        # Merge any global overrides from YAML if present (only when user explicitly includes them)
+        if "global" in raw:
+            global_raw = raw["global"]
+            if "model" in global_raw:
+                global_config.model = global_raw["model"]
+            if "diffusion_steps" in global_raw:
+                global_config.diffusion_steps = global_raw["diffusion_steps"]
+            if "seed" in global_raw:
+                global_config.seed = global_raw["seed"]
+            if "output_dir" in global_raw:
+                global_config.output_dir = global_raw["output_dir"]
+            if "sampling_method" in global_raw:
+                global_config.sampling_method = global_raw["sampling_method"]
+            if "export_preset" in global_raw:
+                global_config.export_preset = global_raw["export_preset"]
+            if "rerank" in global_raw:
+                global_config.rerank = global_raw["rerank"]
+            if "gpu" in global_raw:
+                global_config.gpu = global_raw["gpu"]
+            if "fps" in global_raw:
+                global_config.fps = global_raw["fps"]
+    else:
+        global_raw = raw.get("global", {})
+        global_config = GlobalConfig(
+            model=global_raw.get("model", "kimodo-g1-rp"),
+            diffusion_steps=global_raw.get("diffusion_steps", 100),
+            seed=global_raw.get("seed"),
+            output_dir=global_raw.get("output_dir", "outputs/loco_editor"),
+            gpu=global_raw.get("gpu", 0),
+            fps=global_raw.get("fps", 30),
+            sampling_method=global_raw.get("sampling_method", "uniform"),
+            export_preset=global_raw.get("export_preset", "kimodo"),
+            rerank=global_raw.get("rerank", ""),
+        )
 
     motion_types = {}
     for name, spec_raw in raw.get("motion_types", {}).items():

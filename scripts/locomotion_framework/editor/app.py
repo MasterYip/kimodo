@@ -505,7 +505,11 @@ class LocoEditor:
     # ── Callbacks ──────────────────────────────────────────────────
 
     def _on_generate(self) -> None:
-        """Called when user clicks Generate All Motions."""
+        """Called when user clicks Generate All Motions.
+
+        Supports both single-GPU (in-process) and multi-GPU (launches
+        run_distributed.sh) modes based on the GPU field value.
+        """
         print("[DEBUG] _on_generate CALLED", flush=True)
         if self.state.generation_running:
             print("[DEBUG] _on_generate: already running, returning", flush=True)
@@ -519,27 +523,45 @@ class LocoEditor:
             print("[DEBUG] _on_generate: config is None, returning", flush=True)
             return
 
-        # Resolve GPU device from config (may differ from current state if user changed it)
         g = config.global_
-        device = f"cuda:{g.gpu}" if g.gpu is not None else "cuda:0"
-        self.state.device = device
-
         total = compute_total_motions(config)
-        print(f"[DEBUG] _on_generate: total={total}, device={device}, starting thread", flush=True)
         output_base = g.output_dir
 
-        # Start generation in background thread
+        # Detect multi-GPU mode
+        raw_gpu = g.gpu
+        gpu_str = str(raw_gpu) if raw_gpu is not None else "0"
+        is_multi_gpu = isinstance(raw_gpu, str) and "," in raw_gpu
+
+        if is_multi_gpu:
+            # ── Multi-GPU: launch distributed generation ──
+            self._launch_distributed_generation(config, gpu_str, total, output_base)
+        else:
+            # ── Single GPU: in-process generation ──
+            device = f"cuda:{gpu_str}" if "cuda" not in gpu_str else gpu_str
+            self.state.device = device
+            self._launch_inprocess_generation(config, device, total, output_base)
+
+    def _launch_inprocess_generation(
+        self, config, device: str, total: int, output_base: str
+    ) -> None:
+        """Start in-process generation on a single GPU."""
+        print(f"[DEBUG] _on_generate: total={total}, device={device}, starting thread", flush=True)
+
         self._stop_event = threading.Event()
         self.state.stop_requested = False
         self.state.generation_log = ""
         if self.state.gui_log_md is not None:
-            self.state.gui_log_md.content = "*Starting generation...*"
+            try:
+                from .panels import _log_html
+                self.state.gui_log_md.content = _log_html("*Starting generation...*")
+            except Exception:
+                pass
 
         panels.set_generating(self.state, True)
         panels.append_log(
             self.state,
-            f"### Generation started\n"
-            f"Model: {config.global_.model} | "
+            f"### Generation started (single GPU)\n"
+            f"Model: {config.global_.model} | GPU: {device} | "
             f"Sampling: {config.global_.sampling_method} | "
             f"Rerank: {config.global_.rerank or 'none'}\n"
             f"Types: {len(config.motion_types)} | "
@@ -559,6 +581,7 @@ class LocoEditor:
                     stop_event=self._stop_event,
                     device=self.state.device,
                     return_tensors=True,
+                    max_batch_size=self.state.max_batch_size,
                 )
 
                 self.state.generated_samples = result["results"]
@@ -572,7 +595,6 @@ class LocoEditor:
                     f"({result['elapsed_s']/max(result['total_motions'],1):.2f}s/sample)\n",
                 )
 
-                # Setup multi-character grid for simultaneous playback
                 if self.state.generated_samples:
                     self._setup_character_grid()
 
@@ -592,11 +614,166 @@ class LocoEditor:
         t = threading.Thread(target=_run, daemon=True)
         t.start()
 
+    def _launch_distributed_generation(
+        self, config, gpu_str: str, total: int, output_base: str
+    ) -> None:
+        """Launch distributed generation via run_distributed.sh on multiple GPUs."""
+        g = config.global_
+        gpu_ids = [x.strip() for x in gpu_str.split(",")]
+
+        # Write a temp config file with motion_types_only for the distributed script
+        import tempfile
+        tf = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", prefix="loco_editor_", delete=False
+        )
+        tf.write(config_to_yaml_str(config, motion_types_only=False))
+        tf.flush()
+        tmp_config_path = tf.name
+
+        distributed_script = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+            "scripts", "locomotion_framework", "run_distributed.sh",
+        )
+
+        # Resolve to absolute on server
+        _repo_root = str(Path(__file__).resolve().parent.parent.parent.parent)
+        distributed_script = os.path.join(
+            _repo_root, "scripts", "locomotion_framework", "run_distributed.sh",
+        )
+
+        if not os.path.exists(distributed_script):
+            # Fallback: search known server path
+            distributed_script = "/data/masteryip/kimodo/kimodo/scripts/locomotion_framework/run_distributed.sh"
+
+        self._stop_event = threading.Event()
+        self.state.stop_requested = False
+        self.state.generation_log = ""
+        if self.state.gui_log_md is not None:
+            from .panels import _log_html
+            try:
+                self.state.gui_log_md.content = _log_html("*Starting distributed generation...*")
+            except Exception:
+                pass
+
+        panels.set_generating(self.state, True)
+        panels.append_log(
+            self.state,
+            f"### Distributed generation started\n"
+            f"Model: {g.model} | GPUs: {gpu_str} ({len(gpu_ids)} GPUs) | "
+            f"Sampling: {g.sampling_method} | "
+            f"Rerank: {g.rerank or 'none'}\n"
+            f"Types: {len(config.motion_types)} | "
+            f"Total motions: {total}\n"
+            f"Output: `{output_base}`\n",
+        )
+
+        def _run_distributed():
+            import subprocess
+
+            cmd = [
+                "bash", distributed_script,
+                "-c", tmp_config_path,
+                "-g", gpu_str,
+                "-o", output_base,
+            ]
+            panels.append_log(self.state, f"Command: `{' '.join(cmd)}`\n")
+
+            try:
+                proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                )
+                self._distributed_proc = proc
+
+                for line in proc.stdout:
+                    line = line.rstrip()
+                    panels.append_log(self.state, line)
+                    if self._stop_event.is_set():
+                        proc.terminate()
+                        break
+
+                proc.wait()
+                rc = proc.returncode
+
+                if rc == 0:
+                    panels.append_log(self.state, "\n✅ **Distributed generation complete!**\n")
+                    # Try to load some results for visualization
+                    self._load_generated_results(output_base)
+                else:
+                    panels.append_log(self.state, f"\n❌ **Distributed generation failed** (exit={rc})\n")
+
+            except Exception as e:
+                import traceback
+                tb = traceback.format_exc()
+                panels.append_log(self.state, f"\n❌ **Error:** {e}\n```\n{tb}\n```")
+                print(tb, flush=True)
+            finally:
+                self._generation_lock.release()
+                panels.set_generating(self.state, False)
+                if self.state.gui_progress_bar is not None:
+                    self.state.gui_progress_bar.value = 0.0
+                if self.state.gui_progress_text is not None:
+                    self.state.gui_progress_text.content = "*Ready.*"
+                # Cleanup temp config
+                try:
+                    os.unlink(tmp_config_path)
+                except Exception:
+                    pass
+
+        self._generation_lock.acquire(blocking=True)  # Will be released in thread
+        t = threading.Thread(target=_run_distributed, daemon=True)
+        t.start()
+
+    def _load_generated_results(self, output_base: str) -> None:
+        """After distributed generation, load NPZ results for 3D visualization."""
+        import glob as _glob
+        out_dir = Path(output_base)
+        if not out_dir.exists():
+            return
+
+        npz_files = sorted(out_dir.rglob("motion.npz"))[:MAX_GRID_CHARS]
+        if not npz_files:
+            panels.append_log(self.state, "⚠️ No motion.npz files found for visualization.\n")
+            return
+
+        samples = []
+        for i, npz_path in enumerate(npz_files):
+            try:
+                data = dict(np.load(npz_path))
+                name = npz_path.parent.name
+                type_name = name.split("_")[0] if "_" in name else "unknown"
+                samples.append({
+                    "name": name,
+                    "motion_type": type_name,
+                    "posed_joints": data.get("posed_joints", data.get("joints_pos")),
+                    "global_rot_mats": data.get("global_rot_mats", data.get("joints_rot")),
+                    "foot_contacts": data.get("foot_contacts"),
+                })
+            except Exception as e:
+                panels.append_log(self.state, f"⚠️ Failed to load {npz_path}: {e}\n")
+
+        self.state.generated_samples = samples
+        self.state.current_sample_idx = 0
+        self.state.output_dir = output_base
+
+        if samples:
+            panels.append_log(self.state, f"🎭 Loaded {len(samples)} samples for visualization\n")
+            self._setup_character_grid()
+
     def _on_stop(self) -> None:
         """Called when user clicks Stop."""
         self.state.stop_requested = True
         if self._stop_event is not None:
             self._stop_event.set()
+        # Also terminate distributed subprocess if running
+        if hasattr(self, '_distributed_proc') and self._distributed_proc is not None:
+            try:
+                self._distributed_proc.terminate()
+            except Exception:
+                pass
         panels.append_log(self.state, "\n⏹ **Stop requested...**\n")
 
     def _on_progress(self, type_name: str, done: int, total: int) -> None:
@@ -606,7 +783,11 @@ class LocoEditor:
             panels.append_log(self.state, f"  ✓ `{type_name}` — {total} samples")
 
     def _on_load_yaml(self, path: str) -> None:
-        """Load YAML from a server file path and repopulate all widgets."""
+        """Load YAML from a server file path and repopulate all widgets.
+
+        The file may contain both global: and motion_types: sections.
+        Global settings populate the widgets; motion types populate the YAML text area.
+        """
         if not path:
             return
         try:
@@ -620,13 +801,18 @@ class LocoEditor:
                 return
 
             self.state.config = load_config(path)
-            self.state.config_yaml = config_to_yaml_str(self.state.config)
+            # Store motion-types-only in the YAML text area
+            self.state.config_yaml = config_to_yaml_str(self.state.config, motion_types_only=True)
             panels.append_log(
                 self.state,
                 f"📂 Loaded config from `{path}`\n"
                 f"Types: {len(self.state.config.motion_types)} | "
                 f"Total: {compute_total_motions(self.state.config)} motions",
             )
+
+            # Resolve GPU device
+            g = self.state.config.global_
+            self.state.device = f"cuda:{g.gpu}" if g.gpu is not None and "," not in str(g.gpu) else f"cuda:{str(g.gpu).split(',')[0].strip()}"
 
             # Repopulate GUI
             if self.client is not None:
@@ -653,7 +839,7 @@ class LocoEditor:
             if self.state.config is None:
                 return
 
-            yaml_str = config_to_yaml_str(self.state.config)
+            yaml_str = config_to_yaml_str(self.state.config, motion_types_only=False)
             Path(path).parent.mkdir(parents=True, exist_ok=True)
             with open(path, "w") as f:
                 f.write(yaml_str)

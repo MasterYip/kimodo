@@ -106,14 +106,19 @@ def repopulate_from_config(state: Any, client: viser.ClientHandle) -> None:
     if gw.get("diffusion_steps") is not None:
         gw["diffusion_steps"].value = g.diffusion_steps
     if gw.get("gpu") is not None:
-        gw["gpu"].value = f"cuda:{g.gpu}" if g.gpu is not None else "cuda:0"
+        # gpu may be int or comma-separated string
+        raw_gpu = g.gpu
+        if isinstance(raw_gpu, str) and "," in raw_gpu:
+            gw["gpu"].value = raw_gpu
+        else:
+            gw["gpu"].value = f"cuda:{raw_gpu}" if raw_gpu is not None else "cuda:0"
     if gw.get("output_dir") is not None:
         gw["output_dir"].value = g.output_dir
 
-    # Update YAML text area with serialized config
+    # Update YAML text area with motion-types only (global settings are in widgets)
     if state.gui_yaml_text is not None:
-        state.gui_yaml_text.value = config_to_yaml_str(state.config)
-    state.config_yaml = config_to_yaml_str(state.config)
+        state.gui_yaml_text.value = config_to_yaml_str(state.config, motion_types_only=True)
+    state.config_yaml = config_to_yaml_str(state.config, motion_types_only=True)
 
     # Update the config summary and total motions
     _update_summary_and_total(state)
@@ -128,17 +133,18 @@ def flush_widgets_to_config(state: Any) -> None:
     Called before generation or saving YAML.
     """
     print("[DEBUG] flush_widgets_to_config CALLED", flush=True)
-    # Parse the YAML text area as the primary config source
+    # Parse the YAML text area as the motion-types source
     if state.gui_yaml_text is not None:
         yaml_str = state.gui_yaml_text.value
         print(f"[DEBUG] flush_widgets_to_config: yaml_str length={len(yaml_str)}", flush=True)
         try:
-            state.config = yaml_str_to_config(yaml_str)
+            # Merge: keep existing global settings from widgets, replace motion types
+            base_global = state.config.global_ if state.config else None
+            state.config = yaml_str_to_config(yaml_str, base_global=base_global)
             state.config_yaml = yaml_str
             print(f"[DEBUG] flush_widgets_to_config: parsed OK, {len(state.config.motion_types)} types", flush=True)
         except Exception as e:
             print(f"[DEBUG] flush_widgets_to_config: parse FAILED: {e}", flush=True)
-            # If YAML parsing fails, keep current config and update from widgets
             pass
 
     if state.config is None:
@@ -158,25 +164,40 @@ def flush_widgets_to_config(state: Any) -> None:
     if gw.get("export_preset") is not None:
         g.export_preset = gw["export_preset"].value
     if gw.get("gpu") is not None:
-        try:
-            raw = gw["gpu"].value.strip()
-            # Accept "cuda:0", "0", "cuda0", etc.
-            raw = raw.replace("cuda:", "").replace("cuda", "").strip()
-            g.gpu = int(raw)
-        except (ValueError, AttributeError) as e:
-            print(f"[WARN] Invalid GPU value '{gw['gpu'].value}': {e}. Using cuda:0.", flush=True)
-            g.gpu = 0
+        # Accept single GPU ("cuda:5", "5") or multi-GPU ("5,6,7", "cuda:5,6,7")
+        raw = gw["gpu"].value.strip().replace("cuda:", "").replace("cuda", "").strip()
+        if "," in raw:
+            # Multi-GPU: store as comma-separated string on the config gpu field
+            # The generator will parse it and launch distributed mode
             try:
-                gw["gpu"].value = "cuda:0"
-            except Exception:
-                pass
+                gpu_ids = [int(x.strip()) for x in raw.split(",")]
+                g.gpu = ",".join(str(x) for x in gpu_ids)
+                # For device selection, use the first GPU for model loading
+                state.device = f"cuda:{gpu_ids[0]}"
+            except ValueError:
+                print(f"[WARN] Invalid multi-GPU value '{gw['gpu'].value}'. Using cuda:0.", flush=True)
+                g.gpu = "0"
+                state.device = "cuda:0"
+        else:
+            try:
+                g.gpu = int(raw)
+                state.device = f"cuda:{g.gpu}"
+            except ValueError:
+                print(f"[WARN] Invalid GPU value '{gw['gpu'].value}'. Using cuda:0.", flush=True)
+                g.gpu = 0
+                state.device = "cuda:0"
     if gw.get("diffusion_steps") is not None:
         g.diffusion_steps = gw["diffusion_steps"].value
     if gw.get("output_dir") is not None:
         g.output_dir = gw["output_dir"].value
+    if state.gui_max_batch_size is not None:
+        try:
+            state.max_batch_size = int(state.gui_max_batch_size.value)
+        except Exception:
+            pass
 
-    # Sync YAML text area with merged config
-    state.config_yaml = config_to_yaml_str(state.config)
+    # Sync YAML text area with motion-types only
+    state.config_yaml = config_to_yaml_str(state.config, motion_types_only=True)
     if state.gui_yaml_text is not None:
         try:
             state.gui_yaml_text.value = state.config_yaml
@@ -221,12 +242,35 @@ def update_type_filter_options(state: Any) -> None:
         pass
 
 
+def _log_html(text: str) -> str:
+    """Wrap log text in a scrollable HTML div."""
+    # Escape HTML entities in the raw text, then apply basic formatting
+    escaped = (text
+               .replace("&", "&amp;")
+               .replace("<", "&lt;")
+               .replace(">", "&gt;")
+               .replace("\n", "<br>")
+               .replace("  ", "&nbsp;&nbsp;"))
+    return (
+        '<div style="max-height: 360px; overflow-y: auto; '
+        'background: #1a1b1e; color: #c1c2c5; '
+        'padding: 0.5em; font-family: monospace; font-size: 0.82em; '
+        'line-height: 1.45; border-radius: 4px; '
+        'white-space: pre-wrap; word-break: break-all;">'
+        f'{escaped}'
+        '</div>'
+    )
+
+
 def append_log(state: Any, text: str) -> None:
-    """Append text to the generation log markdown."""
+    """Append text to the generation log (HTML, scrollable)."""
     print(f"[DEBUG] append_log: {text[:100]}", flush=True)
     state.generation_log += text + "\n"
     if state.gui_log_md is not None:
-        state.gui_log_md.content = state.generation_log[-5000:]
+        try:
+            state.gui_log_md.content = _log_html(state.generation_log[-8000:])
+        except Exception:
+            pass
 
 
 # ── Internal: Config Tab ───────────────────────────────────────────
@@ -241,7 +285,7 @@ def _build_config_tab(
     gw = state.global_widgets
     config = state.config
     g = config.global_ if config else None
-    initial_yaml = state.config_yaml or (config_to_yaml_str(config) if config else make_default_yaml())
+    initial_yaml = state.config_yaml or (config_to_yaml_str(config, motion_types_only=True) if config else make_default_yaml())
 
     # ── Presets folder ──
     with client.gui.add_folder("Presets", expand_by_default=True):
@@ -310,9 +354,16 @@ def _build_config_tab(
             initial_value=g.export_preset if g else "rltracker",
             hint="rltracker = flat dirs, kimodo = per-type dirs"
         )
+        initial_gpu = ""
+        if g and g.gpu is not None:
+            raw = g.gpu
+            initial_gpu = str(raw) if isinstance(raw, str) else f"cuda:{raw}"
+        else:
+            initial_gpu = "cuda:0"
+
         gw["gpu"] = client.gui.add_text(
-            "GPU", initial_value=f"cuda:{g.gpu}" if g and g.gpu is not None else "cuda:0",
-            hint="CUDA device for model + generation. Single GPU only (e.g. cuda:0, cuda:5). For multi-GPU, use run_distributed.sh on server."
+            "GPU", initial_value=initial_gpu,
+            hint="CUDA device: single (cuda:5, 5) or multi-GPU comma-separated (5,6,7). Multi-GPU uses distributed generation."
         )
         gw["diffusion_steps"] = client.gui.add_slider(
             "Diffusion Steps", min=10, max=500, step=10,
@@ -358,7 +409,12 @@ def _load_preset(
 
 
 def _on_parse_yaml(state: Any) -> None:
-    """Parse the YAML text area content and update the config + summary."""
+    """Parse the YAML text area content and update config + summary.
+
+    Keeps existing global settings (from widgets) intact — only replaces
+    motion types from the YAML. If the YAML has a 'global:' section it is
+    merged on top of existing settings (user can optionally put globals there).
+    """
     print("[DEBUG] _on_parse_yaml CALLED", flush=True)
     if state.gui_yaml_text is None:
         print("[DEBUG] _on_parse_yaml: gui_yaml_text is None, returning", flush=True)
@@ -366,28 +422,17 @@ def _on_parse_yaml(state: Any) -> None:
     try:
         yaml_str = state.gui_yaml_text.value
         print(f"[DEBUG] _on_parse_yaml: yaml_str length={len(yaml_str)}", flush=True)
-        state.config = yaml_str_to_config(yaml_str)
+
+        # Merge into existing config: keep global settings, replace motion types
+        base_global = state.config.global_ if state.config else None
+        state.config = yaml_str_to_config(yaml_str, base_global=base_global)
         state.config_yaml = yaml_str
 
-        # Update global widget values too
-        g = state.config.global_
-        gw = state.global_widgets
-        if gw.get("model") is not None:
-            gw["model"].value = g.model
-        if gw.get("seed") is not None:
-            gw["seed"].value = g.seed if g.seed is not None else 42
-        if gw.get("sampling_method") is not None:
-            gw["sampling_method"].value = g.sampling_method
-        if gw.get("rerank") is not None:
-            gw["rerank"].value = g.rerank or ""
-        if gw.get("export_preset") is not None:
-            gw["export_preset"].value = g.export_preset
-        if gw.get("diffusion_steps") is not None:
-            gw["diffusion_steps"].value = g.diffusion_steps
-        if gw.get("gpu") is not None:
-            gw["gpu"].value = f"cuda:{g.gpu}" if g.gpu is not None else "cuda:0"
-        if gw.get("output_dir") is not None:
-            gw["output_dir"].value = g.output_dir
+        # Sync YAML text area to motion-types-only view
+        try:
+            state.gui_yaml_text.value = config_to_yaml_str(state.config, motion_types_only=True)
+        except Exception:
+            pass
 
         _update_summary_and_total(state)
         append_log(state, f"✅ YAML parsed: {len(state.config.motion_types)} types, "
@@ -441,7 +486,16 @@ def _build_generate_tab(
         state.gui_progress_text = client.gui.add_markdown(content="*Ready.*")
         state.gui_progress_bar = client.gui.add_progress_bar(value=0.0)
 
-    state.gui_log_md = client.gui.add_markdown(content="*Log will appear here...*")
+        # Max batch size (sub-batch to avoid OOM)
+        state.gui_max_batch_size = client.gui.add_number(
+            "Max Batch Size", initial_value=state.max_batch_size if state.max_batch_size else 50,
+            min=5, max=500, step=5,
+            hint="Sub-batch size for generation. Lower = less GPU memory but slower. 0 = no sub-batching."
+        )
+
+    state.gui_log_md = client.gui.add_html(
+        content=_log_html("*Log will appear here...*")
+    )
 
 
 # ── Internal: Visualize Tab ────────────────────────────────────────

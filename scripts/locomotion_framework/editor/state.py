@@ -70,3 +70,5 @@ class EditorState:
     gui_next_sample_button: Any = None
     gui_type_filter_dropdown: Any = None  # Filter by motion type
     selected_type_filter: str = ""  # Current type filter value ("" = show all)
+    gui_max_batch_size: Any = None
+    max_batch_size: int = 50  # Sub-batch size for generation to avoid OOM

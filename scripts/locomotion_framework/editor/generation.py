@@ -19,6 +19,7 @@ def generate_batch(
     stop_event: Optional[Any] = None,
     device: str = "cuda:0",
     return_tensors: bool = False,
+    max_batch_size: int = 50,
 ) -> dict:
     """Run the locomotion generation pipeline in-process.
 
@@ -109,15 +110,39 @@ def generate_batch(
             if stop_event is not None and stop_event.is_set():
                 break
 
-            # ── Generate batch (one call for all samples of this type) ──
-            diffusion_steps = samples[0].diffusion_steps
-            output = model(
-                per_prompts,
-                per_frames,
-                constraint_lst=per_kimodo_constraints,
-                num_denoising_steps=diffusion_steps,
-                return_numpy=True,
-            )
+            # ── Sub-batch to avoid OOM on large batch sizes ──
+            # Large N × long duration = huge tensor → split into chunks
+            max_per_batch = max_batch_size if max_batch_size > 0 else n
+            chunk_outputs = []
+
+            for chunk_start in range(0, n, max_per_batch):
+                chunk_end = min(chunk_start + max_per_batch, n)
+                per_prompts_chunk = per_prompts[chunk_start:chunk_end]
+                per_frames_chunk = per_frames[chunk_start:chunk_end]
+                per_constraints_chunk = per_kimodo_constraints[chunk_start:chunk_end]
+
+                print(f"  [{type_name}] sub-batch {chunk_start}:{chunk_end} of {n}", flush=True)
+
+                chunk_output = model(
+                    per_prompts_chunk,
+                    per_frames_chunk,
+                    constraint_lst=per_constraints_chunk,
+                    num_denoising_steps=diffusion_steps,
+                    return_numpy=True,
+                )
+                chunk_outputs.append(chunk_output)
+
+            # Merge sub-batch outputs
+            output = {}
+            for key in chunk_outputs[0]:
+                vals = [co[key] for co in chunk_outputs if co.get(key) is not None]
+                if vals:
+                    if isinstance(vals[0], np.ndarray):
+                        output[key] = np.concatenate(vals, axis=0)
+                    else:
+                        output[key] = vals[0]  # fallback
+                else:
+                    output[key] = None
 
             # ── Extract per-sample outputs (trim to actual duration) ──
             for i, sample in enumerate(samples):

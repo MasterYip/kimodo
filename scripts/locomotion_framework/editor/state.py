@@ -15,9 +15,11 @@ class EditorState:
     # Model
     skeleton: Any = None
 
-    # 3D scene
-    character: Any = None  # Character instance
-    current_motion: Any = None  # CharacterMotion instance
+    # 3D scene — multi-character grid (like demo's session.motions)
+    characters: dict[str, Any] = field(default_factory=dict)   # name -> Character
+    motions: dict[str, Any] = field(default_factory=dict)       # name -> CharacterMotion
+    character: Any = None    # convenience: first/default character
+    current_motion: Any = None  # convenience: first/default motion
 
     # Playback
     frame_idx: int = 0
@@ -53,7 +55,6 @@ class EditorState:
 
     # Visualize tab
     gui_play_button: Any = None
-    gui_frame_slider: Any = None
     gui_speed_slider: Any = None
     gui_mesh_checkbox: Any = None
     gui_skeleton_checkbox: Any = None
@@ -62,5 +63,8 @@ class EditorState:
     gui_opacity_slider: Any = None
     gui_camera_dropdown: Any = None
     gui_sample_label: Any = None
+    gui_prev_frame_button: Any = None
+    gui_next_frame_button: Any = None
     gui_prev_sample_button: Any = None
     gui_next_sample_button: Any = None
+    gui_type_filter_dropdown: Any = None  # Filter by motion type

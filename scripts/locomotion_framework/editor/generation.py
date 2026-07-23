@@ -131,9 +131,19 @@ def generate_batch(
                 global_rot_mats = output.get("global_rot_mats")
                 foot_contacts = output.get("foot_contacts")
 
-                pj_i = np.asarray(posed_joints[i]) if posed_joints is not None else None
-                grm_i = np.asarray(global_rot_mats[i]) if global_rot_mats is not None else None
-                fc_i = np.asarray(foot_contacts[i]) if foot_contacts is not None else None
+                def _to_numpy(x):
+                    """Safely convert tensor or numpy to numpy on CPU."""
+                    if x is None:
+                        return None
+                    if isinstance(x, np.ndarray):
+                        return x
+                    if hasattr(x, "cpu"):  # torch tensor (possibly on GPU)
+                        return x.detach().cpu().numpy()
+                    return np.asarray(x)
+
+                pj_i = _to_numpy(posed_joints[i]) if posed_joints is not None else None
+                grm_i = _to_numpy(global_rot_mats[i]) if global_rot_mats is not None else None
+                fc_i = _to_numpy(foot_contacts[i]) if foot_contacts is not None else None
 
                 # Trim to actual duration
                 if pj_i is not None and pj_i.shape[0] > actual_frames:

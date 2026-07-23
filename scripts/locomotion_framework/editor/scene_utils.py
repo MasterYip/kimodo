@@ -97,28 +97,30 @@ def setup_scene(
     return grid_handle
 
 
+def _mesh_mode(model_name: str) -> str:
+    if "g1" in model_name:
+        return "g1_stl"
+    elif "smplx" in model_name:
+        return "smplx_skin"
+    elif "soma" in model_name:
+        return "soma_skin"
+    return "g1_stl"
+
+
 def create_character(
     client: viser.ClientHandle,
     skeleton,
     model_name: str,
     dark_mode: bool = False,
+    name: str = "character0",
 ) -> Character:
     """Create a Character instance for the given skeleton.
 
     Pattern from Demo.add_character_motion — Character creation part.
     """
-    # Determine mesh mode based on model name (same as Demo)
-    if "g1" in model_name:
-        mesh_mode = "g1_stl"
-    elif "smplx" in model_name:
-        mesh_mode = "smplx_skin"
-    elif "soma" in model_name:
-        mesh_mode = "soma_skin"
-    else:
-        mesh_mode = "g1_stl"
-
+    mesh_mode = _mesh_mode(model_name)
     character = Character(
-        "character0",
+        name,
         client,
         skeleton,
         create_skeleton_mesh=True,
@@ -132,6 +134,15 @@ def create_character(
         gui_use_soma_layer_checkbox=None,
     )
     return character
+
+
+def grid_position(index: int, cols: int, rows: int, spacing: float = 2.5):
+    """Compute (x, z) offset for a character in a grid layout, centered at origin."""
+    col = index % cols
+    row = index // cols
+    x_off = (col - (cols - 1) / 2.0) * spacing
+    z_off = -(row - (rows - 1) / 2.0) * spacing
+    return x_off, z_off
 
 
 def set_rest_pose(character: Character) -> CharacterMotion:
@@ -149,16 +160,34 @@ def set_rest_pose(character: Character) -> CharacterMotion:
     return motion
 
 
+def _ensure_torch_device(x, device):
+    """Convert numpy array or tensor to float32 torch tensor on the target device."""
+    if x is None:
+        return None
+    if isinstance(x, np.ndarray):
+        return torch.from_numpy(x).float().to(device)
+    if hasattr(x, "cpu"):
+        return x.detach().to(device).float()
+    return torch.tensor(x, device=device).float()
+
+
 def set_motion_on_character(
     character: Character,
-    posed_joints: torch.Tensor,      # [T, J, 3]
-    global_rot_mats: torch.Tensor,   # [T, J, 3, 3]
-    foot_contacts: Optional[torch.Tensor] = None,  # [T, F]
+    posed_joints,                    # np.ndarray | torch.Tensor  [T, J, 3]
+    global_rot_mats,                 # np.ndarray | torch.Tensor  [T, J, 3, 3]
+    foot_contacts = None,            # np.ndarray | torch.Tensor | None  [T, F]
 ) -> CharacterMotion:
     """Set motion data on a Character, returning a CharacterMotion for playback.
 
-    Pattern from Demo.add_character_motion and Demo.generate.
+    Accepts both numpy arrays and torch tensors (CPU or CUDA).
+    Converts to the same device as the character's skeleton to avoid
+    device-mismatch errors in global_rots_to_local_rots (which indexes
+    with skeleton buffers that live on the model's device).
     """
+    device = character.skeleton.joint_parents.device
+    posed_joints = _ensure_torch_device(posed_joints, device)
+    global_rot_mats = _ensure_torch_device(global_rot_mats, device)
+    foot_contacts = _ensure_torch_device(foot_contacts, device)
     motion = CharacterMotion(character, posed_joints, global_rot_mats, foot_contacts)
     motion.set_frame(0)
     return motion

@@ -7,6 +7,8 @@ Design decisions to avoid viser folder-context scoping issues:
     to a folder after leaving its with: block" viser limitation).
   - Load Preset updates the YAML text area AND global widget values.
   - Generate parses the YAML text area as the source of truth for the config.
+  - Playback uses client.timeline (matching the Demo pattern) for frame
+    display and scrubbing, eliminating slider callback feedback loops.
 
 Uses viser GUI patterns from the original Kimodo demo (kimodo/demo/ui.py):
   - tab_group = client.gui.add_tab_group()
@@ -122,13 +124,17 @@ def flush_widgets_to_config(state: Any) -> None:
 
     Called before generation or saving YAML.
     """
+    print("[DEBUG] flush_widgets_to_config CALLED", flush=True)
     # Parse the YAML text area as the primary config source
     if state.gui_yaml_text is not None:
         yaml_str = state.gui_yaml_text.value
+        print(f"[DEBUG] flush_widgets_to_config: yaml_str length={len(yaml_str)}", flush=True)
         try:
             state.config = yaml_str_to_config(yaml_str)
             state.config_yaml = yaml_str
-        except Exception:
+            print(f"[DEBUG] flush_widgets_to_config: parsed OK, {len(state.config.motion_types)} types", flush=True)
+        except Exception as e:
+            print(f"[DEBUG] flush_widgets_to_config: parse FAILED: {e}", flush=True)
             # If YAML parsing fails, keep current config and update from widgets
             pass
 
@@ -162,15 +168,6 @@ def flush_widgets_to_config(state: Any) -> None:
             pass
 
 
-def set_frame_slider(state: Any, idx: int) -> None:
-    """Update the frame slider value without triggering its callback."""
-    if state.gui_frame_slider is not None:
-        try:
-            state.gui_frame_slider.value = idx
-        except Exception:
-            pass
-
-
 def set_generating(state: Any, running: bool) -> None:
     """Toggle generate/stop button states."""
     state.generation_running = running
@@ -188,7 +185,6 @@ def update_progress(state: Any, type_name: str, done: int, total: int) -> None:
         except Exception:
             pass
     if state.gui_progress_text is not None:
-        total_all = compute_total_motions(state.config) if state.config else 1
         state.gui_progress_text.content = (
             f"**{type_name}**: {done}/{total}  |  *Generating...*"
         )
@@ -196,38 +192,10 @@ def update_progress(state: Any, type_name: str, done: int, total: int) -> None:
 
 def append_log(state: Any, text: str) -> None:
     """Append text to the generation log markdown."""
+    print(f"[DEBUG] append_log: {text[:100]}", flush=True)
     state.generation_log += text + "\n"
     if state.gui_log_md is not None:
         state.gui_log_md.content = state.generation_log[-5000:]
-
-
-def load_sample_into_scene(state: Any, idx: int) -> None:
-    """Load a generated sample into the 3D scene for playback."""
-    if not state.generated_samples or idx >= len(state.generated_samples):
-        return
-    sample = state.generated_samples[idx]
-    state.current_sample_idx = idx
-
-    if state.gui_sample_label is not None:
-        total = len(state.generated_samples)
-        name = sample.get("name", f"sample_{idx}")
-        state.gui_sample_label.content = f"**Sample {idx+1}/{total}**: `{name}`"
-
-    from .scene_utils import set_motion_on_character
-    try:
-        state.current_motion = set_motion_on_character(
-            state.character,
-            sample["posed_joints"],
-            sample["global_rot_mats"],
-            sample.get("foot_contacts"),
-        )
-        state.max_frame_idx = sample["posed_joints"].shape[0] - 1
-        state.frame_idx = 0
-        if state.gui_frame_slider is not None:
-            state.gui_frame_slider.max = state.max_frame_idx
-            state.gui_frame_slider.value = 0
-    except Exception as e:
-        append_log(state, f"❌ Error loading sample {idx}: {e}")
 
 
 # ── Internal: Config Tab ───────────────────────────────────────────
@@ -238,11 +206,7 @@ def _build_config_tab(
     on_load_yaml: Callable[[str], None],
     on_save_yaml: Callable[[str], None],
 ) -> None:
-    """Build the Config tab with global settings widgets and a YAML text area.
-
-    All widgets are created once here and never added/removed. Dynamic
-    changes (Load Preset, Save) only update widget VALUES.
-    """
+    """Build the Config tab with global settings widgets and a YAML text area."""
     gw = state.global_widgets
     config = state.config
     g = config.global_ if config else None
@@ -250,7 +214,6 @@ def _build_config_tab(
 
     # ── Presets folder ──
     with client.gui.add_folder("Presets", expand_by_default=True):
-        # Scan for preset YAML files
         preset_options = ["(none)"]
         if os.path.isdir(_PRESET_DIR):
             preset_options += sorted([
@@ -283,7 +246,6 @@ def _build_config_tab(
             lambda _event: on_save_yaml(state.gui_save_path_text.value)
         )
 
-        # Panel width
         client.gui.add_dropdown(
             "Panel Width", options=PANEL_WIDTH_OPTIONS, initial_value="large",
             hint="Adjust the GUI panel width"
@@ -329,7 +291,6 @@ def _build_config_tab(
 
     # ── Motion Types YAML Editor ──
     with client.gui.add_folder("Motion Types (YAML)", expand_by_default=True):
-        # Use a multiline text area for YAML editing
         state.gui_yaml_text = client.gui.add_text(
             "YAML Config",
             initial_value=initial_yaml,
@@ -337,7 +298,6 @@ def _build_config_tab(
             hint="Edit motion types here as YAML. Use Load Preset to populate from server configs."
         )
 
-        # Button to refresh config from YAML
         client.gui.add_button(
             "🔄 Parse YAML & Update Summary",
             hint="Re-parse the YAML text and update the summary table"
@@ -364,10 +324,13 @@ def _load_preset(
 
 def _on_parse_yaml(state: Any) -> None:
     """Parse the YAML text area content and update the config + summary."""
+    print("[DEBUG] _on_parse_yaml CALLED", flush=True)
     if state.gui_yaml_text is None:
+        print("[DEBUG] _on_parse_yaml: gui_yaml_text is None, returning", flush=True)
         return
     try:
         yaml_str = state.gui_yaml_text.value
+        print(f"[DEBUG] _on_parse_yaml: yaml_str length={len(yaml_str)}", flush=True)
         state.config = yaml_str_to_config(yaml_str)
         state.config_yaml = yaml_str
 
@@ -398,8 +361,11 @@ def _on_parse_yaml(state: Any) -> None:
 
 def _update_summary_and_total(state: Any) -> None:
     """Update the config summary markdown and total motions text."""
+    print("[DEBUG] _update_summary_and_total CALLED", flush=True)
     if state.config is None:
+        print("[DEBUG] _update_summary_and_total: config is None", flush=True)
         return
+    print(f"[DEBUG] _update_summary_and_total: types={len(state.config.motion_types)}, total={compute_total_motions(state.config)}", flush=True)
     if state.gui_config_md is not None:
         state.gui_config_md.content = config_summary_md(state.config)
     if state.gui_total_motions_text is not None:
@@ -448,20 +414,26 @@ def _build_visualize_tab(
     state: Any,
     on_camera_preset: Callable[[str], None],
 ) -> None:
-    """Build the Visualize tab content."""
+    """Build the Visualize tab content.
+
+    Uses client.timeline (the native viser timeline) for frame scrubbing
+    and display, matching the Demo's pattern. The timeline is NOT a tab
+    widget — it's a global control accessed via client.timeline.
+    """
+
     # ── Playback ──
     with client.gui.add_folder("Playback", expand_by_default=True):
         state.gui_play_button = client.gui.add_button("▶ Play")
-        state.gui_frame_slider = client.gui.add_slider(
-            "Frame", min=0, max=max(state.max_frame_idx, 1), step=1,
-            initial_value=0,
-            hint="Current frame"
-        )
+
         state.gui_speed_slider = client.gui.add_slider(
             "Speed", min=0.1, max=5.0, step=0.1,
             initial_value=1.0,
             hint="Playback speed multiplier"
         )
+
+        # Frame navigation buttons (supplement timeline scrubbing)
+        state.gui_prev_frame_button = client.gui.add_button("⏮ Frame -1")
+        state.gui_next_frame_button = client.gui.add_button("Frame +1 ⏭")
 
     # ── Display ──
     with client.gui.add_folder("Display", expand_by_default=True):
@@ -489,27 +461,8 @@ def _build_visualize_tab(
         state.gui_camera_dropdown = cam_dd
         cam_dd.on_update(lambda event: on_camera_preset(event.target.value))
 
-    # ── Sample Navigator ──
-    with client.gui.add_folder("Sample Navigator", expand_by_default=True):
+    # ── Scene Info ──
+    with client.gui.add_folder("Scene Info", expand_by_default=True):
         state.gui_sample_label = client.gui.add_markdown(
             content="*No samples generated yet*"
         )
-        state.gui_prev_sample_button = client.gui.add_button(
-            "◀ Prev Sample", disabled=True
-        )
-        state.gui_next_sample_button = client.gui.add_button(
-            "Next Sample ▶", disabled=True
-        )
-
-        def _on_prev(_event):
-            if state.generated_samples:
-                new_idx = (state.current_sample_idx - 1) % len(state.generated_samples)
-                load_sample_into_scene(state, new_idx)
-
-        def _on_next(_event):
-            if state.generated_samples:
-                new_idx = (state.current_sample_idx + 1) % len(state.generated_samples)
-                load_sample_into_scene(state, new_idx)
-
-        state.gui_prev_sample_button.on_click(_on_prev)
-        state.gui_next_sample_button.on_click(_on_next)

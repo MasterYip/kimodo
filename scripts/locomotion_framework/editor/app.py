@@ -6,23 +6,24 @@ viser patterns for Character rendering, motion playback, scene setup, and theme.
 Architecture:
   - Single-user Viser server on port 7861 (separate from the Kimodo demo on 7860)
   - Three tabs: Config (YAML-equivalent widgets), Generate (batch with progress),
-    Visualize (3D robot playback)
+    Visualize (multi-character 3D robot playback)
   - Generation reuses the locomotion_framework pipeline (sampler + constraints + prompts)
   - 3D rendering uses kimodo.viz Character + CharacterMotion (same as the demo)
+  - Multi-character grid layout: all generated samples play simultaneously
 """
 
 from __future__ import annotations
 
-import io
+import math
 import os
 import sys
 import threading
 import time
-import zipfile
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
+import torch
 
 import viser
 from viser.theme import TitlebarConfig
@@ -45,12 +46,17 @@ from .scene_utils import (
     apply_camera_preset,
     configure_theme,
     create_character,
+    grid_position,
     set_motion_on_character,
     set_rest_pose,
     setup_scene,
     DARK_THEME,
     LIGHT_THEME,
 )
+
+# Max characters to show in the grid (to avoid GPU overload)
+MAX_GRID_CHARS = 20
+DEFAULT_CHAR_SPACING = 3.0
 
 
 class LocoEditor:
@@ -63,6 +69,7 @@ class LocoEditor:
       - Character + CharacterMotion for 3D rendering
       - Playback loop advancing frames at model FPS
       - Keyboard controls on client.scene
+      - Multi-character simultaneous playback via motions dict
     """
 
     def __init__(
@@ -82,6 +89,9 @@ class LocoEditor:
         # GPU generation lock
         self._generation_lock = threading.Lock()
         self._stop_event: Optional[threading.Event] = None
+
+        # Suppress slider re-entrancy during programmatic updates
+        self._setting_frame = False
 
         # Load initial config
         if config_path and os.path.exists(config_path):
@@ -112,6 +122,7 @@ class LocoEditor:
 
         # Grid handle for theme switching
         self.grid_handle: Optional[viser.GridHandle] = None
+        self._dark_mode = False
 
     # ── Client lifecycle ──────────────────────────────────────────
 
@@ -130,16 +141,28 @@ class LocoEditor:
                 self._load_model()
 
             # Scene setup (pattern from Demo.setup_scene)
-            self.grid_handle = setup_scene(client, dark_mode=False)
-            configure_theme(client, dark_mode=False)
+            self.grid_handle = setup_scene(client, dark_mode=self._dark_mode)
+            configure_theme(client, dark_mode=self._dark_mode)
 
-            # Character (pattern from Demo.add_character_motion)
-            self.state.character = create_character(
-                client, self.skeleton, self.model_name, dark_mode=False
+            # Default character in rest pose (before generation)
+            default_char = create_character(
+                client, self.skeleton, self.model_name,
+                dark_mode=self._dark_mode, name="preview",
             )
-            self.state.current_motion = set_rest_pose(self.state.character)
+            self.state.character = default_char
+            self.state.current_motion = set_rest_pose(default_char)
+            self.state.characters["preview"] = default_char
+            self.state.motions["preview"] = self.state.current_motion
             self.state.max_frame_idx = 1
             self.state.model_fps = self.model_fps
+
+            # Set up viser timeline (replaces custom slider)
+            client.timeline.set_defaults(
+                fps=self.model_fps,
+                default_num_frames_zoom=300,
+                max_frames_zoom=2000,
+            )
+            client.timeline.set_current_frame(0)
 
             # Build GUI panels (locomotion-specific tabs)
             panels.build_all_panels(
@@ -194,51 +217,212 @@ class LocoEditor:
         self.model_name = resolved
         print(f"Model loaded: {resolved} (fps={self.model_fps})")
 
+    # ── Character grid management ─────────────────────────────────
+
+    def _clear_characters(self) -> None:
+        """Remove all existing characters and their motions from the scene."""
+        s = self.state
+        for name, motion in list(s.motions.items()):
+            try:
+                motion.clear()
+            except Exception:
+                pass
+        s.motions.clear()
+        s.characters.clear()
+        s.character = None
+        s.current_motion = None
+
+    def _setup_character_grid(self) -> None:
+        """Create Characters + CharacterMotions for all generated samples in a grid.
+
+        Samples are arranged in a grid layout. All characters play simultaneously
+        at the same frame index, matching the original Kimodo Demo's multi-character
+        playback pattern.
+        """
+        s = self.state
+        samples = s.generated_samples
+        if not samples or self.client is None:
+            return
+
+        client = self.client
+
+        # Clear existing characters (except prev/next nav still works for re-load)
+        self._clear_characters()
+
+        # Limit to MAX_GRID_CHARS (show first N)
+        display_samples = samples[:MAX_GRID_CHARS]
+        n = len(display_samples)
+        cols = min(n, 5)
+        rows = math.ceil(n / cols)
+        spacing = DEFAULT_CHAR_SPACING
+
+        print(f"[DEBUG] Creating character grid: {n} chars, {cols}x{rows}", flush=True)
+
+        for i, sample in enumerate(display_samples):
+            name = sample.get("name", f"sample_{i}")
+            type_name = sample.get("motion_type", "unknown")
+
+            # Create character
+            char = create_character(
+                client, self.skeleton, self.model_name,
+                dark_mode=self._dark_mode, name=name,
+            )
+
+            # Translate motion data for grid position
+            pj = sample["posed_joints"]
+            # Handle both torch tensors and numpy arrays
+            if hasattr(pj, "cpu"):
+                pj = pj.detach().cpu().numpy()
+            pj = pj.astype(np.float64).copy()
+            x_off, z_off = grid_position(i, cols, rows, spacing)
+            pj[..., 0] += x_off
+            pj[..., 2] += z_off
+
+            grm = sample.get("global_rot_mats")
+            if hasattr(grm, "cpu"):
+                grm = grm.detach().cpu().numpy()
+
+            fc = sample.get("foot_contacts")
+            if hasattr(fc, "cpu"):
+                fc = fc.detach().cpu().numpy()
+
+            # Create motion
+            motion = set_motion_on_character(char, pj, grm, fc)
+
+            # Store
+            s.characters[name] = char
+            s.motions[name] = motion
+
+            # Track first character as the "convenience" ref
+            if i == 0:
+                s.character = char
+                s.current_motion = motion
+
+        # Set max frame to longest motion
+        def _n_frames(arr) -> int:
+            if arr is None:
+                return 0
+            return arr.shape[0] if hasattr(arr, "shape") else 0
+
+        s.max_frame_idx = max(
+            _n_frames(sample.get("posed_joints")) - 1 for sample in display_samples
+        )
+        s.frame_idx = 0
+        s.current_sample_idx = 0
+
+        # Update timeline range
+        if client is not None:
+            client.timeline.set_defaults(
+                fps=self.model_fps,
+                default_duration=max(1, s.max_frame_idx),
+                max_duration=max(1, s.max_frame_idx),
+                default_num_frames_zoom=min(300, s.max_frame_idx + 30),
+                max_frames_zoom=max(300, s.max_frame_idx + 30),
+            )
+
+        # Apply display settings to all characters
+        self._apply_display_settings()
+
+        # Force frame 0
+        self._set_frame(0)
+
+        # Update sample navigator label
+        if s.gui_sample_label is not None:
+            s.gui_sample_label.content = (
+                f"**{len(display_samples)} characters** in grid "
+                f"({cols}×{rows}) | {len(samples)} total samples"
+            )
+        panels.append_log(s, f"🎭 Loaded {len(display_samples)} characters in grid")
+
+    def _apply_display_settings(self) -> None:
+        """Apply current display settings to all characters."""
+        s = self.state
+        show_mesh = True
+        show_skel = True
+        opacity = 0.9
+        try:
+            if s.gui_mesh_checkbox is not None:
+                show_mesh = s.gui_mesh_checkbox.value
+        except Exception:
+            pass
+        try:
+            if s.gui_skeleton_checkbox is not None:
+                show_skel = s.gui_skeleton_checkbox.value
+        except Exception:
+            pass
+        try:
+            if s.gui_opacity_slider is not None:
+                opacity = s.gui_opacity_slider.value
+        except Exception:
+            pass
+
+        for char in s.characters.values():
+            char.set_skinned_mesh_visibility(show_mesh)
+            if char.skeleton_mesh is not None:
+                char.skeleton_mesh.set_visibility(show_skel)
+            char.set_skinned_mesh_opacity(opacity)
+
     # ── Playback controls ─────────────────────────────────────────
 
     def _wire_playback_controls(self, client: viser.ClientHandle) -> None:
-        """Connect viser widget events to playback state.
+        """Connect viser widget events and timeline to playback state.
 
-        Pattern from Demo GUI callbacks + keyboard handling on client.scene.
+        Uses client.timeline for frame display/scrubbing (matching the Demo pattern),
+        which eliminates the slider callback feedback loop.
         """
         s = self.state
 
+        # Play/pause button
         if s.gui_play_button is not None:
             @s.gui_play_button.on_click
             def _(event: viser.GuiEvent) -> None:
                 s.playing = not s.playing
                 s.gui_play_button.text = "⏸ Pause" if s.playing else "▶ Play"
 
-        if s.gui_frame_slider is not None:
-            @s.gui_frame_slider.on_update
+        # Frame navigation buttons
+        if s.gui_prev_frame_button is not None:
+            @s.gui_prev_frame_button.on_click
             def _(event: viser.GuiEvent) -> None:
-                s.frame_idx = int(event.target.value)
-                self._set_frame(s.frame_idx)
+                self._set_frame(max(0, s.frame_idx - 1))
 
+        if s.gui_next_frame_button is not None:
+            @s.gui_next_frame_button.on_click
+            def _(event: viser.GuiEvent) -> None:
+                self._set_frame(min(s.max_frame_idx, s.frame_idx + 1))
+
+        # Speed slider
         if s.gui_speed_slider is not None:
             @s.gui_speed_slider.on_update
             def _(event: viser.GuiEvent) -> None:
                 s.playback_speed = event.target.value
 
-        # Display toggles
+        # Timeline scrubbing (user drags the timeline handle)
+        @client.timeline.on_frame_change
+        def _(event: viser.TimelineFrameEvent) -> None:
+            self._set_frame(event.frame)
+
+        # --- Display toggles (iterate all characters) ---
+
         if s.gui_mesh_checkbox is not None:
             @s.gui_mesh_checkbox.on_update
             def _(event: viser.GuiEvent) -> None:
-                if s.character is not None:
-                    s.character.set_skinned_mesh_visibility(event.target.value)
+                for char in s.characters.values():
+                    char.set_skinned_mesh_visibility(event.target.value)
 
         if s.gui_skeleton_checkbox is not None:
             @s.gui_skeleton_checkbox.on_update
             def _(event: viser.GuiEvent) -> None:
-                if s.character is not None and s.character.skeleton_mesh is not None:
-                    s.character.skeleton_mesh.set_visibility(event.target.value)
+                for char in s.characters.values():
+                    if char.skeleton_mesh is not None:
+                        char.skeleton_mesh.set_visibility(event.target.value)
 
         if s.gui_dark_mode_checkbox is not None:
             @s.gui_dark_mode_checkbox.on_update
             def _(event: viser.GuiEvent) -> None:
+                self._dark_mode = event.target.value
                 configure_theme(client, dark_mode=event.target.value)
-                if s.character is not None:
-                    s.character.change_theme(event.target.value)
+                for char in s.characters.values():
+                    char.change_theme(event.target.value)
                 if self.grid_handle is not None:
                     theme = DARK_THEME if event.target.value else LIGHT_THEME
                     self.grid_handle.section_color = theme["grid"]
@@ -246,10 +430,11 @@ class LocoEditor:
         if s.gui_opacity_slider is not None:
             @s.gui_opacity_slider.on_update
             def _(event: viser.GuiEvent) -> None:
-                if s.character is not None:
-                    s.character.set_skinned_mesh_opacity(event.target.value)
+                for char in s.characters.values():
+                    char.set_skinned_mesh_opacity(event.target.value)
 
-        # Keyboard controls (pattern from Demo — on client.scene, not client)
+        # --- Keyboard controls (pattern from Demo) ---
+
         @client.scene.on_keyboard_event("keydown", debounce_ms=100)
         def _(event: viser.KeyboardEvent) -> None:
             key = event.key
@@ -258,29 +443,45 @@ class LocoEditor:
                 if s.gui_play_button is not None:
                     s.gui_play_button.text = "⏸ Pause" if s.playing else "▶ Play"
             elif key == "ArrowRight":
-                s.frame_idx = min(s.max_frame_idx, s.frame_idx + 1)
-                self._set_frame(s.frame_idx)
+                self._set_frame(min(s.max_frame_idx, s.frame_idx + 1))
             elif key == "ArrowLeft":
-                s.frame_idx = max(0, s.frame_idx - 1)
-                self._set_frame(s.frame_idx)
+                self._set_frame(max(0, s.frame_idx - 1))
 
     def _set_frame(self, idx: int) -> None:
-        """Set current frame on motion and update slider.
+        """Set current frame on ALL motions and update the timeline.
 
-        Pattern from Demo.set_frame.
+        Pattern from Demo.set_frame — iterate session.motions.
+        Uses a guard flag to prevent re-entrant updates from the timeline callback.
         """
-        s = self.state
-        idx = max(0, min(s.max_frame_idx, idx))
-        s.frame_idx = idx
-        if s.current_motion is not None:
-            s.current_motion.set_frame(idx)
-        panels.set_frame_slider(s, idx)
+        if self._setting_frame:
+            return
+        self._setting_frame = True
+
+        try:
+            s = self.state
+            idx = max(0, min(s.max_frame_idx, idx))
+            s.frame_idx = idx
+
+            # Update all motions simultaneously (Demo pattern)
+            for motion in list(s.motions.values()):
+                try:
+                    motion.set_frame(idx)
+                except Exception:
+                    pass
+
+            # Sync timeline display
+            if self.client is not None:
+                self.client.timeline.set_current_frame(idx)
+        finally:
+            self._setting_frame = False
 
     # ── Callbacks ──────────────────────────────────────────────────
 
     def _on_generate(self) -> None:
         """Called when user clicks Generate All Motions."""
+        print("[DEBUG] _on_generate CALLED", flush=True)
         if self.state.generation_running:
+            print("[DEBUG] _on_generate: already running, returning", flush=True)
             return
 
         # Rebuild config from widgets first
@@ -288,9 +489,11 @@ class LocoEditor:
 
         config = self.state.config
         if config is None:
+            print("[DEBUG] _on_generate: config is None, returning", flush=True)
             return
 
         total = compute_total_motions(config)
+        print(f"[DEBUG] _on_generate: total={total}, starting thread", flush=True)
         output_base = config.global_.output_dir
 
         # Start generation in background thread
@@ -337,9 +540,9 @@ class LocoEditor:
                     f"({result['elapsed_s']/max(result['total_motions'],1):.2f}s/sample)\n",
                 )
 
-                # Load first sample into scene
+                # Setup multi-character grid for simultaneous playback
                 if self.state.generated_samples:
-                    panels.load_sample_into_scene(self.state, 0)
+                    self._setup_character_grid()
 
             except Exception as e:
                 import traceback
@@ -449,7 +652,8 @@ class LocoEditor:
     def run(self) -> None:
         """Start the editor main loop (playback + event processing).
 
-        Pattern from Demo.run.
+        Pattern from Demo.run — single update_counter loop over all client sessions.
+        Since we have a single-user editor, we process just our one state.
         """
         print(f"\n{'='*60}")
         print(f"Loco Editor running at http://127.0.0.1:{self.port}")
@@ -461,23 +665,21 @@ class LocoEditor:
         print(f"  Open http://127.0.0.1:{self.port}\n")
 
         update_counter = 0
-        playback_fps = self.model_fps * 2.0
+        playback_fps = self.model_fps * 2.0  # supports up to 2x speed
 
         while True:
-            last_time = time.time()
+            last_update_time = time.time()
             s = self.state
 
-            # Advance playback (pattern from Demo.run)
-            if s.playing and s.current_motion is not None:
-                interval = int(playback_fps / (s.playback_speed * s.model_fps))
-                if update_counter % max(interval, 1) == 0:
+            # Advance playback (pattern from Demo.run — per-session frame advance)
+            if s.playing and s.motions:
+                update_interval = int(playback_fps / (s.playback_speed * s.model_fps))
+                if update_counter % max(update_interval, 1) == 0:
                     next_frame = s.frame_idx + 1
                     if next_frame > s.max_frame_idx:
                         next_frame = 0
-                    s.frame_idx = next_frame
-                    s.current_motion.set_frame(s.frame_idx)
-                    panels.set_frame_slider(s, s.frame_idx)
+                    self._set_frame(next_frame)
 
-            elapsed = time.time() - last_time
+            elapsed = time.time() - last_update_time
             time.sleep(max(0, 1.0 / playback_fps - elapsed))
             update_counter = (update_counter + 1) % int(playback_fps)

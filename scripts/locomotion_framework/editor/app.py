@@ -173,6 +173,7 @@ class LocoEditor:
                 on_load_yaml=self._on_load_yaml,
                 on_save_yaml=self._on_save_yaml,
                 on_camera_preset=self._on_camera_preset,
+                on_type_filter=self._on_type_filter,
             )
 
             # Wire playback controls (pattern from Demo + keyboard)
@@ -233,11 +234,10 @@ class LocoEditor:
         s.current_motion = None
 
     def _setup_character_grid(self) -> None:
-        """Create Characters + CharacterMotions for all generated samples in a grid.
+        """Create Characters + CharacterMotions for generated samples in a grid.
 
-        Samples are arranged in a grid layout. All characters play simultaneously
-        at the same frame index, matching the original Kimodo Demo's multi-character
-        playback pattern.
+        Filters by s.selected_type_filter if set (non-empty, not "(all)").
+        All characters in the grid play simultaneously at the same frame index.
         """
         s = self.state
         samples = s.generated_samples
@@ -246,21 +246,33 @@ class LocoEditor:
 
         client = self.client
 
-        # Clear existing characters (except prev/next nav still works for re-load)
+        # Filter by selected motion type
+        type_filter = s.selected_type_filter
+        if type_filter and type_filter != "(all)":
+            display_samples = [s for s in samples if s.get("motion_type") == type_filter]
+        else:
+            display_samples = list(samples)
+
+        if not display_samples:
+            panels.append_log(s, f"⚠️ No samples match type filter: {type_filter}")
+            return
+
+        # Limit to MAX_GRID_CHARS
+        display_samples = display_samples[:MAX_GRID_CHARS]
+
+        # Clear existing characters
         self._clear_characters()
 
-        # Limit to MAX_GRID_CHARS (show first N)
-        display_samples = samples[:MAX_GRID_CHARS]
         n = len(display_samples)
         cols = min(n, 5)
         rows = math.ceil(n / cols)
         spacing = DEFAULT_CHAR_SPACING
 
-        print(f"[DEBUG] Creating character grid: {n} chars, {cols}x{rows}", flush=True)
+        type_label = f" [{type_filter}]" if type_filter and type_filter != "(all)" else ""
+        print(f"[DEBUG] Creating character grid: {n} chars ({cols}x{rows}){type_label}", flush=True)
 
         for i, sample in enumerate(display_samples):
             name = sample.get("name", f"sample_{i}")
-            type_name = sample.get("motion_type", "unknown")
 
             # Create character
             char = create_character(
@@ -270,7 +282,6 @@ class LocoEditor:
 
             # Translate motion data for grid position
             pj = sample["posed_joints"]
-            # Handle both torch tensors and numpy arrays
             if hasattr(pj, "cpu"):
                 pj = pj.detach().cpu().numpy()
             pj = pj.astype(np.float64).copy()
@@ -320,19 +331,24 @@ class LocoEditor:
                 max_frames_zoom=max(300, s.max_frame_idx + 30),
             )
 
+        # Update type filter dropdown options (when samples first arrive)
+        panels.update_type_filter_options(s)
+
         # Apply display settings to all characters
         self._apply_display_settings()
 
         # Force frame 0
         self._set_frame(0)
 
-        # Update sample navigator label
+        # Update sample label
         if s.gui_sample_label is not None:
+            total_all = len(samples)
+            type_info = f" | type: {type_filter}" if type_filter and type_filter != "(all)" else ""
             s.gui_sample_label.content = (
-                f"**{len(display_samples)} characters** in grid "
-                f"({cols}×{rows}) | {len(samples)} total samples"
+                f"**{n} characters** in grid ({cols}×{rows}){type_info}"
+                f"\n{total_all} total samples across all types"
             )
-        panels.append_log(s, f"🎭 Loaded {len(display_samples)} characters in grid")
+        panels.append_log(s, f"🎭 Showing {n} characters in grid{type_label}")
 
     def _apply_display_settings(self) -> None:
         """Apply current display settings to all characters."""
@@ -377,7 +393,7 @@ class LocoEditor:
             @s.gui_play_button.on_click
             def _(event: viser.GuiEvent) -> None:
                 s.playing = not s.playing
-                s.gui_play_button.text = "⏸ Pause" if s.playing else "▶ Play"
+                s.gui_play_button.text = "⏹ Stop" if s.playing else "▶ Play"
 
         # Frame navigation buttons
         if s.gui_prev_frame_button is not None:
@@ -400,6 +416,12 @@ class LocoEditor:
         @client.timeline.on_frame_change
         def _(event: viser.TimelineFrameEvent) -> None:
             self._set_frame(event.frame)
+
+        # --- Type filter dropdown ---
+        if s.gui_type_filter_dropdown is not None:
+            @s.gui_type_filter_dropdown.on_update
+            def _(event: viser.GuiEvent) -> None:
+                self._on_type_filter(event.target.value)
 
         # --- Display toggles (iterate all characters) ---
 
@@ -441,7 +463,7 @@ class LocoEditor:
             if key == " ":
                 s.playing = not s.playing
                 if s.gui_play_button is not None:
-                    s.gui_play_button.text = "⏸ Pause" if s.playing else "▶ Play"
+                    s.gui_play_button.text = "⏹ Stop" if s.playing else "▶ Play"
             elif key == "ArrowRight":
                 self._set_frame(min(s.max_frame_idx, s.frame_idx + 1))
             elif key == "ArrowLeft":
@@ -641,6 +663,13 @@ class LocoEditor:
                 self.client.add_notification(
                     "Save failed", str(e), auto_close_seconds=5.0
                 )
+
+    def _on_type_filter(self, type_name: str) -> None:
+        """Called when user selects a motion type filter."""
+        s = self.state
+        s.selected_type_filter = type_name
+        if s.generated_samples:
+            self._setup_character_grid()
 
     def _on_camera_preset(self, preset_name: str) -> None:
         """Move camera to a named preset."""

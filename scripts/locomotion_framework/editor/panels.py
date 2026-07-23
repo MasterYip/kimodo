@@ -53,6 +53,7 @@ def build_all_panels(
     on_load_yaml: Callable[[str], None],
     on_save_yaml: Callable[[str], None],
     on_camera_preset: Callable[[str], None],
+    on_type_filter: Callable[[str], None] = None,
 ) -> None:
     """Create all GUI tabs and populate them with widgets.
 
@@ -72,7 +73,7 @@ def build_all_panels(
 
     # ── Visualize Tab ──────────────────────────────────────────────
     with tab_group.add_tab("Visualize", viser.Icon.EYE):
-        _build_visualize_tab(client, state, on_camera_preset)
+        _build_visualize_tab(client, state, on_camera_preset, on_type_filter)
 
 
 def repopulate_from_config(state: Any, client: viser.ClientHandle) -> None:
@@ -188,6 +189,21 @@ def update_progress(state: Any, type_name: str, done: int, total: int) -> None:
         state.gui_progress_text.content = (
             f"**{type_name}**: {done}/{total}  |  *Generating...*"
         )
+
+
+def update_type_filter_options(state: Any) -> None:
+    """Populate the type filter dropdown from generated samples."""
+    if state.gui_type_filter_dropdown is None:
+        return
+    samples = state.generated_samples
+    if not samples:
+        return
+    types = sorted(set(s.get("motion_type", "unknown") for s in samples))
+    options = ["(all)"] + types
+    try:
+        state.gui_type_filter_dropdown.options = options
+    except Exception:
+        pass
 
 
 def append_log(state: Any, text: str) -> None:
@@ -413,6 +429,7 @@ def _build_visualize_tab(
     client: viser.ClientHandle,
     state: Any,
     on_camera_preset: Callable[[str], None],
+    on_type_filter: Callable[[str], None] = None,
 ) -> None:
     """Build the Visualize tab content.
 
@@ -420,6 +437,15 @@ def _build_visualize_tab(
     and display, matching the Demo's pattern. The timeline is NOT a tab
     widget — it's a global control accessed via client.timeline.
     """
+
+    # ── Type Filter ──
+    with client.gui.add_folder("Motion Type", expand_by_default=True):
+        state.gui_type_filter_dropdown = client.gui.add_dropdown(
+            "Type",
+            options=["(all)"],
+            initial_value="(all)",
+            hint="Select which motion type to display (shows only that type's samples)"
+        )
 
     # ── Playback ──
     with client.gui.add_folder("Playback", expand_by_default=True):

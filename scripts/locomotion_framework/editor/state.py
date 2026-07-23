@@ -68,3 +68,4 @@ class EditorState:
     gui_prev_sample_button: Any = None
     gui_next_sample_button: Any = None
     gui_type_filter_dropdown: Any = None  # Filter by motion type
+    selected_type_filter: str = ""  # Current type filter value ("" = show all)

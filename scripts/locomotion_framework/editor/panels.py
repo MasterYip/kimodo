@@ -552,9 +552,8 @@ def _build_visualize_tab(
         state.gui_skeleton_checkbox = client.gui.add_checkbox(
             "Show Skeleton", initial_value=True
         )
-        state.gui_dark_mode_checkbox = client.gui.add_checkbox(
-            "Dark Mode", initial_value=False
-        )
+        # Dark Mode toggle is created early in app.py (before configure_theme)
+        # to sync with the titlebar's built-in dark/light toggle.
         state.gui_opacity_slider = client.gui.add_slider(
             "Mesh Opacity", min=0.1, max=1.0, step=0.05,
             initial_value=0.9,

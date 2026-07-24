@@ -59,7 +59,7 @@ class EditorState:
     gui_speed_slider: Any = None
     gui_mesh_checkbox: Any = None
     gui_skeleton_checkbox: Any = None
-    gui_dark_mode_checkbox: Any = None
+    gui_dark_mode_checkbox: Any = None  # unused; titlebar has built-in dark/light toggle
     gui_foot_contacts_checkbox: Any = None
     gui_opacity_slider: Any = None
     gui_camera_dropdown: Any = None
@@ -80,3 +80,5 @@ class EditorState:
     gui_prev_page_button: Any = None
     gui_next_page_button: Any = None
     gui_page_label: Any = None
+
+    # Titlebar handles dark/light mode toggle; no separate checkbox widget needed.

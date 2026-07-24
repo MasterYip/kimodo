@@ -145,9 +145,51 @@ class LocoEditor:
             if self.model is None:
                 self._load_model()
 
+            s = self.state
+
+            # Dark mode checkbox — created for its UUID so the titlebar
+            # toggle can sync with it, but hidden via CSS below.
+            s.gui_dark_mode_checkbox = client.gui.add_checkbox(
+                "Dark Mode", initial_value=self._dark_mode,
+            )
+
+            # CSS injection: hide the dark-mode checkbox widget and make
+            # tab bar sticky with a solid background (not transparent).
+            client.gui.add_html(
+                "<style>\n"
+                f"  #{s.gui_dark_mode_checkbox.uuid},"
+                f"  label[for=\"{s.gui_dark_mode_checkbox.uuid}\"]"
+                "    {{ display: none !important; }}\n"
+                "  [role=\"tablist\"] {"
+                "    position: sticky !important;"
+                "    top: 0 !important;"
+                "    z-index: 100 !important;"
+                "    background-color: var(--mantine-color-body, #1A1B1E) !important;"
+                "    padding-top: 4px !important;"
+                "  }\n"
+                "</style>"
+            )
+
             # Scene setup (pattern from Demo.setup_scene)
             self.grid_handle = setup_scene(client, dark_mode=self._dark_mode)
-            configure_theme(client, dark_mode=self._dark_mode)
+            configure_theme(
+                client, dark_mode=self._dark_mode,
+                titlebar_dark_mode_checkbox_uuid=s.gui_dark_mode_checkbox.uuid,
+            )
+
+            # Wire the checkbox so the titlebar toggle actually changes the theme
+            @s.gui_dark_mode_checkbox.on_update
+            def _on_dark_mode(event: viser.GuiEvent) -> None:
+                self._dark_mode = event.target.value
+                configure_theme(
+                    client, dark_mode=event.target.value,
+                    titlebar_dark_mode_checkbox_uuid=s.gui_dark_mode_checkbox.uuid,
+                )
+                for char in s.characters.values():
+                    char.change_theme(event.target.value)
+                if self.grid_handle is not None:
+                    theme = DARK_THEME if event.target.value else LIGHT_THEME
+                    self.grid_handle.section_color = theme["grid"]
 
             # Default character in rest pose (before generation)
             default_char = create_character(
@@ -474,17 +516,6 @@ class LocoEditor:
                 for char in s.characters.values():
                     if char.skeleton_mesh is not None:
                         char.skeleton_mesh.set_visibility(event.target.value)
-
-        if s.gui_dark_mode_checkbox is not None:
-            @s.gui_dark_mode_checkbox.on_update
-            def _(event: viser.GuiEvent) -> None:
-                self._dark_mode = event.target.value
-                configure_theme(client, dark_mode=event.target.value)
-                for char in s.characters.values():
-                    char.change_theme(event.target.value)
-                if self.grid_handle is not None:
-                    theme = DARK_THEME if event.target.value else LIGHT_THEME
-                    self.grid_handle.section_color = theme["grid"]
 
         if s.gui_opacity_slider is not None:
             @s.gui_opacity_slider.on_update

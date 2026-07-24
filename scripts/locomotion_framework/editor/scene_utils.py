@@ -1,15 +1,18 @@
 """Scene utilities for the Loco Editor.
 
 Adapted from the Kimodo Demo class (kimodo/demo/app.py) to reuse proven patterns
-for Character creation, scene setup, and camera presets.
+for Character creation, scene setup, camera presets, and theme configuration.
 """
 
+import base64
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
 import torch
 
 import viser
+from viser.theme import TitlebarButton, TitlebarConfig, TitlebarImage
 from kimodo.viz.viser_utils import Character, CharacterMotion
 
 # Theme colours (copied from kimodo.demo.config)
@@ -31,8 +34,8 @@ CAMERA_PRESETS = {
         "look_at": np.array([0.0, 0.8, 0.0], dtype=np.float64),
     },
     "Orbit": {
-        "position": np.array([2.74, 1.88, 7.68], dtype=np.float64),
-        "look_at": np.array([0.0, 0.0, 0.0], dtype=np.float64),
+        "position": np.array([3.0, 2.0, 5.0], dtype=np.float64),
+        "look_at": np.array([0.0, 0.8, 0.0], dtype=np.float64),
     },
 }
 
@@ -49,19 +52,70 @@ def apply_camera_preset(client: viser.ClientHandle, preset_name: str) -> None:
 
 
 def configure_theme(
-    client: viser.ClientHandle, dark_mode: bool = False
+    client: viser.ClientHandle,
+    dark_mode: bool = False,
+    titlebar_dark_mode_checkbox_uuid: str | None = None,
 ) -> None:
-    """Configure viser GUI theme (panel label, control width, dark mode).
+    """Configure viser GUI theme with a Kimodo-style titlebar.
 
-    Simplified from Demo.configure_theme — no titlebar branding.
+    Pattern from Demo.configure_theme — titlebar with SVG logo, buttons,
+    and built-in dark/light mode toggle synced to a checkbox UUID.
     """
-    client.gui.set_panel_label("Loco Editor")
+    # ── Titlebar buttons (top-right) ────────────────────────────
+    buttons = (
+        TitlebarButton(
+            text="GitHub",
+            icon="GitHub",
+            href="https://github.com/MasterYip/kimodo",
+        ),
+        TitlebarButton(
+            text="Documentation",
+            icon="Description",
+            href="https://research.nvidia.com/labs/sil/projects/kimodo/docs/index.html",
+        ),
+        TitlebarButton(
+            text="Project Page",
+            icon=None,
+            href="https://research.nvidia.com/labs/sil/projects/kimodo/",
+        ),
+    )
+
+    # ── Kimodo SVG logo (top-left) ─────────────────────────────
+    assets_candidates = [
+        Path("/data/masteryip/kimodo/kimodo/assets"),
+        Path(__file__).resolve().parent.parent.parent.parent / "assets",
+    ]
+    image = None
+    for assets_dir in assets_candidates:
+        svg_path = assets_dir / "Kimodo.svg"
+        if svg_path.exists():
+            svg_bytes = svg_path.read_bytes()
+            svg_b64 = base64.standard_b64encode(svg_bytes).decode("ascii")
+            image = TitlebarImage(
+                image_url_light=f"data:image/svg+xml;base64,{svg_b64}",
+                image_url_dark=f"data:image/svg+xml;base64,{svg_b64}",
+                image_alt="Kimodo",
+                href="https://github.com/MasterYip/kimodo",
+            )
+            break
+
+    # ── Titlebar config ──────────────────────────────────────────
+    titlebar = TitlebarConfig(
+        buttons=buttons,
+        image=image,
+        title_text="Fine-Grained Motion Generator",
+    )
+
+    client.gui.set_panel_label("Kimodo — Fine-Grained Motion Generator")
     client.gui.configure_theme(
+        titlebar_content=titlebar,
         control_layout="floating",
         control_width="large",
         dark_mode=dark_mode,
         show_logo=False,
         show_share_button=False,
+        titlebar_dark_mode_checkbox_uuid=titlebar_dark_mode_checkbox_uuid,
+        brand_color=(152, 189, 255),
     )
 
 
@@ -75,11 +129,11 @@ def setup_scene(
     floor_len = 20.0
     theme = DARK_THEME if dark_mode else LIGHT_THEME
 
-    # Camera (same initial position as Demo)
+    # Camera — focused on the robot at origin (~0.8 m torso height)
     client.camera.position = np.array(
-        [2.74, 1.88, 7.68], dtype=np.float64
+        [4.0, 2.0, 6.0], dtype=np.float64
     )
-    client.camera.look_at = np.array([0.0, 0.0, 0.0], dtype=np.float64)
+    client.camera.look_at = np.array([0.0, 0.8, 0.0], dtype=np.float64)
     client.camera.up_direction = np.array([0.0, 1.0, 0.0], dtype=np.float64)
     client.camera.fov = np.deg2rad(45.0)
 

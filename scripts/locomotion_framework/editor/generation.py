@@ -113,6 +113,7 @@ def generate_batch(
             # ── Sub-batch to avoid OOM on large batch sizes ──
             # Large N × long duration = huge tensor → split into chunks
             max_per_batch = max_batch_size if max_batch_size > 0 else n
+            diffusion_steps = samples[0].diffusion_steps
             chunk_outputs = []
 
             for chunk_start in range(0, n, max_per_batch):

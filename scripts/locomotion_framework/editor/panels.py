@@ -536,6 +536,14 @@ def _build_visualize_tab(
         state.gui_prev_frame_button = client.gui.add_button("⏮ Frame -1")
         state.gui_next_frame_button = client.gui.add_button("Frame +1 ⏭")
 
+    # ── Page Navigation ──
+    with client.gui.add_folder("Page", expand_by_default=True):
+        state.gui_prev_page_button = client.gui.add_button("◀ Prev Page")
+        state.gui_next_page_button = client.gui.add_button("Next Page ▶")
+        state.gui_page_label = client.gui.add_markdown(
+            content="*Page 1/1  —  0 samples*"
+        )
+
     # ── Display ──
     with client.gui.add_folder("Display", expand_by_default=True):
         state.gui_mesh_checkbox = client.gui.add_checkbox(

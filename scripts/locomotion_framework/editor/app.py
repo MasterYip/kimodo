@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import math
 import os
+import pickle
 import sys
 import threading
 import time
@@ -24,6 +25,7 @@ from typing import Optional
 
 import numpy as np
 import torch
+import yaml as _yaml_mod
 
 import viser
 from viser.theme import TitlebarConfig
@@ -239,10 +241,11 @@ class LocoEditor:
         s.current_motion = None
 
     def _setup_character_grid(self) -> None:
-        """Create Characters + CharacterMotions for generated samples in a grid.
+        """Store all displayable samples and render the first page.
 
-        Filters by s.selected_type_filter if set (non-empty, not "(all)").
-        All characters in the grid play simultaneously at the same frame index.
+        Filters by s.selected_type_filter if set. Characters are paginated:
+        only `page_size` appear in the 3D scene at once. Page nav buttons
+        cycle through pages without reloading data.
         """
         s = self.state
         samples = s.generated_samples
@@ -254,38 +257,61 @@ class LocoEditor:
         # Filter by selected motion type
         type_filter = s.selected_type_filter
         if type_filter and type_filter != "(all)":
-            display_samples = [s for s in samples if s.get("motion_type") == type_filter]
+            s._filtered_samples = [x for x in samples if x.get("motion_type") == type_filter]
         else:
-            display_samples = list(samples)
+            s._filtered_samples = list(samples)
 
-        if not display_samples:
+        if not s._filtered_samples:
             panels.append_log(s, f"⚠️ No samples match type filter: {type_filter}")
             return
 
-        # Limit to MAX_GRID_CHARS
-        display_samples = display_samples[:MAX_GRID_CHARS]
+        # Update type filter dropdown options
+        panels.update_type_filter_options(s)
+
+        # Show first page
+        s.current_page = 0
+        self._show_page(0)
+
+    def _show_page(self, page: int) -> None:
+        """Render characters for the given page index."""
+        s = self.state
+        client = self.client
+        if client is None:
+            return
+
+        samples = getattr(s, '_filtered_samples', s.generated_samples)
+        if not samples:
+            return
+
+        total = len(samples)
+        total_pages = max(1, math.ceil(total / s.page_size))
+        page = max(0, min(total_pages - 1, page))
+        s.current_page = page
+
+        start = page * s.page_size
+        end = min(start + s.page_size, total)
+        page_samples = samples[start:end]
 
         # Clear existing characters
         self._clear_characters()
 
-        n = len(display_samples)
+        n = len(page_samples)
         cols = min(n, 5)
         rows = math.ceil(n / cols)
         spacing = DEFAULT_CHAR_SPACING
 
+        type_filter = s.selected_type_filter
         type_label = f" [{type_filter}]" if type_filter and type_filter != "(all)" else ""
-        print(f"[DEBUG] Creating character grid: {n} chars ({cols}x{rows}){type_label}", flush=True)
+        print(f"[DEBUG] Page {page+1}/{total_pages}: {n} chars ({cols}x{rows}){type_label}", flush=True)
 
-        for i, sample in enumerate(display_samples):
+        for i, sample in enumerate(page_samples):
             name = sample.get("name", f"sample_{i}")
 
-            # Create character
             char = create_character(
                 client, self.skeleton, self.model_name,
                 dark_mode=self._dark_mode, name=name,
             )
 
-            # Translate motion data for grid position
             pj = sample["posed_joints"]
             if hasattr(pj, "cpu"):
                 pj = pj.detach().cpu().numpy()
@@ -302,31 +328,26 @@ class LocoEditor:
             if hasattr(fc, "cpu"):
                 fc = fc.detach().cpu().numpy()
 
-            # Create motion
             motion = set_motion_on_character(char, pj, grm, fc)
 
-            # Store
             s.characters[name] = char
             s.motions[name] = motion
 
-            # Track first character as the "convenience" ref
             if i == 0:
                 s.character = char
                 s.current_motion = motion
 
-        # Set max frame to longest motion
-        def _n_frames(arr) -> int:
+        def _n_frames(arr):
             if arr is None:
                 return 0
             return arr.shape[0] if hasattr(arr, "shape") else 0
 
         s.max_frame_idx = max(
-            _n_frames(sample.get("posed_joints")) - 1 for sample in display_samples
+            _n_frames(sample.get("posed_joints")) - 1 for sample in page_samples
         )
         s.frame_idx = 0
-        s.current_sample_idx = 0
+        s.current_sample_idx = start
 
-        # Update timeline range
         if client is not None:
             client.timeline.set_defaults(
                 fps=self.model_fps,
@@ -336,24 +357,24 @@ class LocoEditor:
                 max_frames_zoom=max(300, s.max_frame_idx + 30),
             )
 
-        # Update type filter dropdown options (when samples first arrive)
-        panels.update_type_filter_options(s)
-
-        # Apply display settings to all characters
         self._apply_display_settings()
-
-        # Force frame 0
         self._set_frame(0)
 
-        # Update sample label
+        # Update labels
         if s.gui_sample_label is not None:
-            total_all = len(samples)
-            type_info = f" | type: {type_filter}" if type_filter and type_filter != "(all)" else ""
             s.gui_sample_label.content = (
-                f"**{n} characters** in grid ({cols}×{rows}){type_info}"
-                f"\n{total_all} total samples across all types"
+                f"**{n} characters** in grid ({cols}×{rows})  "
+                f"|  Showing {start+1}–{end} of {total}"
+                f"\nPage {page+1}/{total_pages}  |  {total} total samples"
             )
-        panels.append_log(s, f"🎭 Showing {n} characters in grid{type_label}")
+
+        if s.gui_page_label is not None:
+            s.gui_page_label.content = (
+                f"**Page {page+1}/{total_pages}**  —  "
+                f"{n} characters  ({start+1}–{end} of {total})"
+            )
+
+        panels.append_log(s, f"🎭 Page {page+1}/{total_pages}: {n} characters{type_label}")
 
     def _apply_display_settings(self) -> None:
         """Apply current display settings to all characters."""
@@ -410,6 +431,17 @@ class LocoEditor:
             @s.gui_next_frame_button.on_click
             def _(event: viser.GuiEvent) -> None:
                 self._set_frame(min(s.max_frame_idx, s.frame_idx + 1))
+
+        # Page navigation
+        if s.gui_prev_page_button is not None:
+            @s.gui_prev_page_button.on_click
+            def _(event: viser.GuiEvent) -> None:
+                self._show_page(s.current_page - 1)
+
+        if s.gui_next_page_button is not None:
+            @s.gui_next_page_button.on_click
+            def _(event: viser.GuiEvent) -> None:
+                self._show_page(s.current_page + 1)
 
         # Speed slider
         if s.gui_speed_slider is not None:
@@ -525,7 +557,7 @@ class LocoEditor:
 
         g = config.global_
         total = compute_total_motions(config)
-        output_base = g.output_dir
+        output_base = os.path.abspath(g.output_dir)
 
         # Detect multi-GPU mode
         raw_gpu = g.gpu
@@ -617,41 +649,110 @@ class LocoEditor:
     def _launch_distributed_generation(
         self, config, gpu_str: str, total: int, output_base: str
     ) -> None:
-        """Launch distributed generation via run_distributed.sh on multiple GPUs."""
+        """Launch distributed generation using per-GPU worker subprocesses.
+
+        Each worker runs ``generate_batch()`` — the exact same function used by
+        single-GPU mode — and pickles raw tensor results.  After all workers
+        finish, results are loaded and sent to the 3D scene in identical format
+        to single-GPU output.  No NPZ / RLTracker format conversion needed.
+        """
+        import shutil
+        import subprocess as _sp
+        import tempfile
+
         g = config.global_
         gpu_ids = [x.strip() for x in gpu_str.split(",")]
+        n_gpus = len(gpu_ids)
 
-        # Write a temp config file with motion_types_only for the distributed script
-        import tempfile
-        tf = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", prefix="loco_editor_", delete=False
-        )
-        tf.write(config_to_yaml_str(config, motion_types_only=False))
-        tf.flush()
-        tmp_config_path = tf.name
+        # ── Split motion types / samples across GPUs ──────────────────
+        # n_gpus > n_types  → sample-level split (proportional)
+        # n_gpus ≤ n_types  → type-level split (round-robin)
+        motion_types = list(config.motion_types.keys())
+        n_types = len(motion_types)
 
-        distributed_script = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
-            "scripts", "locomotion_framework", "run_distributed.sh",
-        )
+        # Helper: get num_samples from a MotionSpec or dict
+        def _ns(mt):
+            return int(getattr(config.motion_types[mt], "num_samples", 0) or 0)
 
-        # Resolve to absolute on server
-        _repo_root = str(Path(__file__).resolve().parent.parent.parent.parent)
-        distributed_script = os.path.join(
-            _repo_root, "scripts", "locomotion_framework", "run_distributed.sh",
-        )
+        if n_gpus > n_types and n_types > 0:
+            use_sample_split = True
+            config_total = sum(_ns(t) for t in motion_types)
+            samples_per_gpu = math.ceil(total / n_gpus)
+            type_weights = {
+                t: max(_ns(t), 0) / max(config_total, 1) for t in motion_types
+            }
 
-        if not os.path.exists(distributed_script):
-            # Fallback: search known server path
-            distributed_script = "/data/masteryip/kimodo/kimodo/scripts/locomotion_framework/run_distributed.sh"
+            gpu_assignments: dict[str, dict[str, int]] = {}
+            remaining = total
+            for gpu_id in gpu_ids:
+                n = min(samples_per_gpu, remaining)
+                remaining -= n
+                assignments: dict[str, int] = {}
+                cumulative = 0
+                for j, t in enumerate(motion_types):
+                    if j == len(motion_types) - 1:
+                        n_t = max(0, n - cumulative)
+                    else:
+                        n_t = max(0, int(round(n * type_weights[t])))
+                    assignments[t] = n_t
+                    cumulative += n_t
+                gpu_assignments[gpu_id] = assignments
+        else:
+            use_sample_split = False
+            gpu_assignments = {gid: {} for gid in gpu_ids}
+            for i, mtype in enumerate(motion_types):
+                gpu_assignments[gpu_ids[i % n_gpus]][mtype] = _ns(mtype)
 
+        # Log assignment
+        for gpu_id in gpu_ids:
+            parts = [f"{t}={gpu_assignments[gpu_id].get(t, 0)}" for t in motion_types]
+            gpu_total = sum(gpu_assignments[gpu_id].values())
+            panels.append_log(
+                self.state,
+                f"GPU {gpu_id}: {gpu_total} samples — {{{', '.join(parts)}}}",
+            )
+
+        # ── Write per-GPU sub-config YAMLs ────────────────────────────
+        tmpdir = Path(tempfile.mkdtemp(prefix="loco_editor_dist_"))
+        per_gpu_configs: list[tuple[str, Path]] = []
+
+        full_yaml = config_to_yaml_str(config, motion_types_only=False)
+        base_dict = _yaml_mod.safe_load(full_yaml)
+
+        for gpu_id in gpu_ids:
+            assignments = gpu_assignments[gpu_id]
+            sub_cfg = _yaml_mod.safe_load(full_yaml)  # fresh copy
+            for t in motion_types:
+                sub_cfg["motion_types"][t]["num_samples"] = assignments.get(t, 0)
+            sub_cfg["motion_types"] = {
+                t: s for t, s in sub_cfg["motion_types"].items()
+                if s.get("num_samples", 0) > 0
+            }
+            if not sub_cfg["motion_types"]:
+                continue
+            # Distinct seed per GPU
+            base_seed = sub_cfg.get("global", {}).get("seed", 42) or 42
+            sub_cfg["global"]["seed"] = base_seed + int(gpu_id) * 1000
+            sub_cfg["global"]["gpu"] = 0  # worker remaps via CUDA_VISIBLE_DEVICES
+
+            tmp_yaml = tmpdir / f"gpu{gpu_id}.yaml"
+            with open(tmp_yaml, "w") as f:
+                _yaml_mod.dump(sub_cfg, f, default_flow_style=False)
+            per_gpu_configs.append((gpu_id, tmp_yaml))
+
+        # ── Locate worker script ──────────────────────────────────────
+        worker_script = str(Path(__file__).resolve().parent / "worker.py")
+
+        # ── Set up generation state ───────────────────────────────────
         self._stop_event = threading.Event()
         self.state.stop_requested = False
         self.state.generation_log = ""
         if self.state.gui_log_md is not None:
             from .panels import _log_html
             try:
-                self.state.gui_log_md.content = _log_html("*Starting distributed generation...*")
+                self.state.gui_log_md.content = _log_html(
+                    "*Starting distributed generation...*"
+                )
             except Exception:
                 pass
 
@@ -659,56 +760,146 @@ class LocoEditor:
         panels.append_log(
             self.state,
             f"### Distributed generation started\n"
-            f"Model: {g.model} | GPUs: {gpu_str} ({len(gpu_ids)} GPUs) | "
+            f"Model: {g.model} | GPUs: {gpu_str} ({n_gpus} GPUs) | "
+            f"Strategy: {'sample-level' if use_sample_split else 'type-level'} split\n"
             f"Sampling: {g.sampling_method} | "
             f"Rerank: {g.rerank or 'none'}\n"
-            f"Types: {len(config.motion_types)} | "
+            f"Types: {n_types} | "
             f"Total motions: {total}\n"
             f"Output: `{output_base}`\n",
         )
 
-        def _run_distributed():
-            import subprocess
+        def _run_distributed() -> None:
+            log_lock = threading.Lock()
 
-            cmd = [
-                "bash", distributed_script,
-                "-c", tmp_config_path,
-                "-g", gpu_str,
-                "-o", output_base,
-            ]
-            panels.append_log(self.state, f"Command: `{' '.join(cmd)}`\n")
+            def _append(msg: str) -> None:
+                with log_lock:
+                    panels.append_log(self.state, msg)
 
             try:
-                proc = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    bufsize=1,
-                )
-                self._distributed_proc = proc
+                # ── Launch all workers in parallel ─────────────────
+                worker_procs: list[tuple[str, _sp.Popen, str]] = []
+                for gpu_id, tmp_yaml in per_gpu_configs:
+                    output_pkl = str(tmpdir / f"gpu{gpu_id}_results.pkl")
+                    cmd = [
+                        sys.executable, worker_script,
+                        "--config", str(tmp_yaml),
+                        "--gpu", str(gpu_id),
+                        "--output", output_pkl,
+                        "--max-batch-size", str(self.state.max_batch_size),
+                    ]
+                    env = os.environ.copy()
+                    env["PYTHONUNBUFFERED"] = "1"
+                    _append(f"[GPU {gpu_id}] Launching worker...")
+                    proc = _sp.Popen(
+                        cmd,
+                        stdout=_sp.PIPE,
+                        stderr=_sp.STDOUT,
+                        text=True,
+                        bufsize=1,
+                        env=env,
+                    )
+                    worker_procs.append((gpu_id, proc, output_pkl))
 
-                for line in proc.stdout:
-                    line = line.rstrip()
-                    panels.append_log(self.state, line)
-                    if self._stop_event.is_set():
-                        proc.terminate()
+                self._distributed_procs = worker_procs
+
+                # ── Stream stdout from each worker in a thread ─────
+                def _stream(gpu_id: str, proc) -> None:
+                    try:
+                        for line in proc.stdout:
+                            line = line.rstrip()
+                            if line:
+                                _append(f"[GPU {gpu_id}] {line}")
+                    except Exception:
+                        pass
+
+                stream_threads = []
+                for gpu_id, proc, _ in worker_procs:
+                    t = threading.Thread(
+                        target=_stream, args=(gpu_id, proc), daemon=True
+                    )
+                    t.start()
+                    stream_threads.append(t)
+
+                # ── Wait for all workers (honour stop_event) ───────
+                while True:
+                    all_done = all(
+                        proc.poll() is not None for _, proc, _ in worker_procs
+                    )
+                    if all_done:
                         break
+                    if self._stop_event is not None and self._stop_event.is_set():
+                        _append("\n⏹ **Stop requested — terminating workers...**")
+                        for _, proc, _ in worker_procs:
+                            try:
+                                proc.terminate()
+                            except Exception:
+                                pass
+                        break
+                    time.sleep(0.5)
 
-                proc.wait()
-                rc = proc.returncode
+                # Drain remaining stdout and join stream threads
+                for _, proc, _ in worker_procs:
+                    try:
+                        proc.wait(timeout=5)
+                    except Exception:
+                        pass
+                for t in stream_threads:
+                    t.join(timeout=5)
 
-                if rc == 0:
-                    panels.append_log(self.state, "\n✅ **Distributed generation complete!**\n")
-                    # Try to load some results for visualization
-                    self._load_generated_results(output_base)
+                # ── Collect results ────────────────────────────────
+                failed = [
+                    (gid, proc) for gid, proc, _ in worker_procs
+                    if proc.returncode != 0
+                ]
+
+                if not failed:
+                    all_results: list[dict] = []
+                    for gpu_id, _proc, output_pkl in worker_procs:
+                        if os.path.exists(output_pkl):
+                            try:
+                                with open(output_pkl, "rb") as f:
+                                    r = pickle.load(f)
+                                loaded = len(r.get("results", []))
+                                all_results.extend(r["results"])
+                                _append(
+                                    f"[GPU {gpu_id}] Loaded {loaded} samples"
+                                )
+                            except Exception as e:
+                                _append(
+                                    f"[GPU {gpu_id}] ⚠️ Failed to load: {e}"
+                                )
+                        else:
+                            _append(
+                                f"[GPU {gpu_id}] ⚠️ No output pickle"
+                            )
+
+                    self.state.generated_samples = all_results
+                    self.state.current_sample_idx = 0
+                    self.state.output_dir = output_base
+
+                    _append(
+                        f"\n✅ **Distributed generation complete!**\n"
+                        f"{len(all_results)} motions across {n_gpus} GPU(s)\n"
+                        f"Output: `{output_base}`\n"
+                    )
+
+                    if all_results:
+                        self._setup_character_grid()
+                    else:
+                        _append(
+                            "⚠️ No samples loaded — check worker logs above."
+                        )
                 else:
-                    panels.append_log(self.state, f"\n❌ **Distributed generation failed** (exit={rc})\n")
+                    for gpu_id, proc in failed:
+                        _append(
+                            f"❌ GPU {gpu_id} FAILED (exit={proc.returncode})"
+                        )
 
             except Exception as e:
                 import traceback
                 tb = traceback.format_exc()
-                panels.append_log(self.state, f"\n❌ **Error:** {e}\n```\n{tb}\n```")
+                _append(f"\n❌ **Error:** {e}\n```\n{tb}\n```")
                 print(tb, flush=True)
             finally:
                 self._generation_lock.release()
@@ -717,63 +908,28 @@ class LocoEditor:
                     self.state.gui_progress_bar.value = 0.0
                 if self.state.gui_progress_text is not None:
                     self.state.gui_progress_text.content = "*Ready.*"
-                # Cleanup temp config
+                # Cleanup temp files
                 try:
-                    os.unlink(tmp_config_path)
+                    shutil.rmtree(str(tmpdir), ignore_errors=True)
                 except Exception:
                     pass
 
-        self._generation_lock.acquire(blocking=True)  # Will be released in thread
+        self._generation_lock.acquire(blocking=True)  # Released in thread finally
         t = threading.Thread(target=_run_distributed, daemon=True)
         t.start()
-
-    def _load_generated_results(self, output_base: str) -> None:
-        """After distributed generation, load NPZ results for 3D visualization."""
-        import glob as _glob
-        out_dir = Path(output_base)
-        if not out_dir.exists():
-            return
-
-        npz_files = sorted(out_dir.rglob("motion.npz"))[:MAX_GRID_CHARS]
-        if not npz_files:
-            panels.append_log(self.state, "⚠️ No motion.npz files found for visualization.\n")
-            return
-
-        samples = []
-        for i, npz_path in enumerate(npz_files):
-            try:
-                data = dict(np.load(npz_path))
-                name = npz_path.parent.name
-                type_name = name.split("_")[0] if "_" in name else "unknown"
-                samples.append({
-                    "name": name,
-                    "motion_type": type_name,
-                    "posed_joints": data.get("posed_joints", data.get("joints_pos")),
-                    "global_rot_mats": data.get("global_rot_mats", data.get("joints_rot")),
-                    "foot_contacts": data.get("foot_contacts"),
-                })
-            except Exception as e:
-                panels.append_log(self.state, f"⚠️ Failed to load {npz_path}: {e}\n")
-
-        self.state.generated_samples = samples
-        self.state.current_sample_idx = 0
-        self.state.output_dir = output_base
-
-        if samples:
-            panels.append_log(self.state, f"🎭 Loaded {len(samples)} samples for visualization\n")
-            self._setup_character_grid()
 
     def _on_stop(self) -> None:
         """Called when user clicks Stop."""
         self.state.stop_requested = True
         if self._stop_event is not None:
             self._stop_event.set()
-        # Also terminate distributed subprocess if running
-        if hasattr(self, '_distributed_proc') and self._distributed_proc is not None:
-            try:
-                self._distributed_proc.terminate()
-            except Exception:
-                pass
+        # Also terminate distributed worker subprocesses if running
+        if hasattr(self, '_distributed_procs') and self._distributed_procs is not None:
+            for _, proc, _ in self._distributed_procs:
+                try:
+                    proc.terminate()
+                except Exception:
+                    pass
         panels.append_log(self.state, "\n⏹ **Stop requested...**\n")
 
     def _on_progress(self, type_name: str, done: int, total: int) -> None:
@@ -861,9 +1017,10 @@ class LocoEditor:
                 )
 
     def _on_type_filter(self, type_name: str) -> None:
-        """Called when user selects a motion type filter."""
+        """Called when user selects a motion type filter. Resets to page 0."""
         s = self.state
         s.selected_type_filter = type_name
+        s.current_page = 0
         if s.generated_samples:
             self._setup_character_grid()
 

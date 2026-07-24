@@ -72,3 +72,11 @@ class EditorState:
     selected_type_filter: str = ""  # Current type filter value ("" = show all)
     gui_max_batch_size: Any = None
     max_batch_size: int = 50  # Sub-batch size for generation to avoid OOM
+
+    # Pagination
+    current_page: int = 0
+    page_size: int = 20  # max chars per page in 3D grid
+    _filtered_samples: list = field(default_factory=list)  # filtered by type, for pagination
+    gui_prev_page_button: Any = None
+    gui_next_page_button: Any = None
+    gui_page_label: Any = None

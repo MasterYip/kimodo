@@ -17,11 +17,10 @@
 
 > 🎯 **Use case**: generate thousands of precisely-parameterized locomotion clips for training robot control policies (RL trackers, imitation learning), with fine-grained control over velocity ranges, torso heights, styles, and sampling strategies.
 
-<!-- TODO: insert demo GIF showing full workflow
 <div align="center">
-  <img src="./assets/demo_workflow.gif" width="1280">
+  <video src="https://github.com/user-attachments/assets/fe29148b-59e3-47ff-9c9a-ee879c46f6bb">
 </div>
--->
+
 
 ### Key Features
 

@@ -80,20 +80,25 @@ def configure_theme(
         ),
     )
 
-    # ── Kimodo SVG logo (top-left) ─────────────────────────────
+    # ── Kimodo banner logo (top-left, dual-scheme) ──────────────
     assets_candidates = [
         Path("/data/masteryip/kimodo/kimodo/assets"),
         Path(__file__).resolve().parent.parent.parent.parent / "assets",
     ]
     image = None
     for assets_dir in assets_candidates:
-        svg_path = assets_dir / "Kimodo.svg"
-        if svg_path.exists():
-            svg_bytes = svg_path.read_bytes()
-            svg_b64 = base64.standard_b64encode(svg_bytes).decode("ascii")
+        dark_path = assets_dir / "KimodoLocoMoGenBlackBkg.svg"   # dark mode
+        light_path = assets_dir / "KimodoLocoMoGenWhiteBkg.svg"  # light mode
+        if dark_path.exists() and light_path.exists():
+            dark_b64 = base64.standard_b64encode(
+                dark_path.read_bytes()
+            ).decode("ascii")
+            light_b64 = base64.standard_b64encode(
+                light_path.read_bytes()
+            ).decode("ascii")
             image = TitlebarImage(
-                image_url_light=f"data:image/svg+xml;base64,{svg_b64}",
-                image_url_dark=f"data:image/svg+xml;base64,{svg_b64}",
+                image_url_light=f"data:image/svg+xml;base64,{light_b64}",
+                image_url_dark=f"data:image/svg+xml;base64,{dark_b64}",
                 image_alt="Kimodo",
                 href="https://github.com/MasterYip/kimodo",
             )
@@ -103,7 +108,7 @@ def configure_theme(
     titlebar = TitlebarConfig(
         buttons=buttons,
         image=image,
-        title_text="Fine-Grained Motion Generator",
+        title_text="Fine-Grained Locomotion Generator",
     )
 
     client.gui.set_panel_label("Kimodo — Fine-Grained Motion Generator")

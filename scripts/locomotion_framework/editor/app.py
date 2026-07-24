@@ -154,18 +154,27 @@ class LocoEditor:
             )
 
             # CSS injection: hide the dark-mode checkbox widget and make
-            # tab bar sticky with a solid background (not transparent).
+            # the Mantine Tabs.List sticky with a solid dark background.
             client.gui.add_html(
                 "<style>\n"
                 f"  #{s.gui_dark_mode_checkbox.uuid},"
                 f"  label[for=\"{s.gui_dark_mode_checkbox.uuid}\"]"
                 "    {{ display: none !important; }}\n"
-                "  [role=\"tablist\"] {"
+                "  .mantine-Tabs-tabsList, [role=\"tablist\"] {"
                 "    position: sticky !important;"
                 "    top: 0 !important;"
                 "    z-index: 100 !important;"
-                "    background-color: var(--mantine-color-body, #1A1B1E) !important;"
                 "    padding-top: 4px !important;"
+                "    padding-bottom: 2px !important;"
+                "  }\n"
+                "  /* Adapt to dark/light color scheme */"
+                "  [data-mantine-color-scheme=\"dark\"] .mantine-Tabs-tabsList,"
+                "  [data-mantine-color-scheme=\"dark\"] [role=\"tablist\"] {"
+                "    background: #25262B !important;"
+                "  }\n"
+                "  [data-mantine-color-scheme=\"light\"] .mantine-Tabs-tabsList,"
+                "  [data-mantine-color-scheme=\"light\"] [role=\"tablist\"] {"
+                "    background: #FFFFFF !important;"
                 "  }\n"
                 "</style>"
             )

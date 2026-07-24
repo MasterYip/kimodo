@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/Kimodo.svg" alt="Kimodo Fine-Grained Batch Generation" width="60%">
+  <img src="./assets/KimodoLocoMoGen.jpg" alt="Kimodo Fine-Grained Batch Motion Generation" width="100%">
 </p>
 
 <p align="center">

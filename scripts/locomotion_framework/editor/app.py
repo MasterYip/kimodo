@@ -874,6 +874,17 @@ class LocoEditor:
                                 f"[GPU {gpu_id}] ⚠️ No output pickle"
                             )
 
+                    # ── De-duplicate names across workers ──────────
+                    # Each worker re-starts sample_idx at 0, so multiple
+                    # GPUs produce identical names (e.g. walk_0000).
+                    # Reassign globally-unique names: walk_0000 … walk_0039.
+                    seen: dict[str, int] = {}
+                    for r in all_results:
+                        mtype = r.get("motion_type", "unknown")
+                        idx = seen.get(mtype, 0)
+                        r["name"] = f"{mtype}_{idx:04d}"
+                        seen[mtype] = idx + 1
+
                     self.state.generated_samples = all_results
                     self.state.current_sample_idx = 0
                     self.state.output_dir = output_base

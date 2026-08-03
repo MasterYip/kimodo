@@ -25,11 +25,11 @@ class VelRange:
 class MotionSpec:
     """Defines a distribution over one motion type (walk, run, stand, etc.)."""
     name: str
-    description: str                       # base text prompt template
-    duration_range: tuple[float, float]    # (min, max) seconds
-    vel_cmd: dict[str, VelRange]           # {"vx": ..., "vy": ..., "wz": ...}
-    torso_height_range: tuple[float, float]  # (min, max) normalized
-    styles: list[str]                      # ["casually", "briskly", ...]
+    description: str = ""                  # base text prompt template; empty = unconstrained
+    duration_range: tuple[float, float] = (3.0, 8.0)  # (min, max) seconds
+    vel_cmd: dict[str, VelRange] = field(default_factory=dict)  # {"vx": ..., "vy": ..., "wz": ...}
+    torso_height_range: Optional[tuple[float, float]] = None  # (min, max) normalized; None = unconstrained
+    styles: list[str] = field(default_factory=list)  # ["casually", "briskly", ...]
     weight: float = 1.0                    # relative sampling probability
     num_samples: int = 10                  # how many motions from this type
     diffusion_steps: int = 100
@@ -97,10 +97,10 @@ def load_config(path: str | Path) -> LocomotionConfig:
     for name, spec_raw in raw.get("motion_types", {}).items():
         spec = MotionSpec(
             name=name,
-            description=spec_raw["description"],
-            duration_range=tuple(spec_raw["duration"]),
+            description=spec_raw.get("description", ""),
+            duration_range=tuple(spec_raw["duration"]) if "duration" in spec_raw else (3.0, 8.0),
             vel_cmd=_parse_vel_cmd(spec_raw.get("vel_cmd", {})),
-            torso_height_range=tuple(spec_raw["torso_height"]),
+            torso_height_range=tuple(spec_raw["torso_height"]) if "torso_height" in spec_raw else None,
             styles=spec_raw.get("styles", []),
             weight=spec_raw.get("weight", 1.0),
             num_samples=spec_raw.get("num_samples", 10),

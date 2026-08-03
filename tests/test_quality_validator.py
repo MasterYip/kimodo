@@ -6,17 +6,17 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from locomotion_framework.quality_validator import validate_one
-from locomotion_framework.orchestrator import _assign_global_indices
+from locomotion_framework.orchestrator import _assign_global_indices, _validate_generation_timing
 from locomotion_framework.sampler import SampledMotion
 
 
 def _thresholds():
     import yaml
-    path = Path(__file__).resolve().parents[1] / "scripts/locomotion_framework/configs/g1_quality_thresholds_v1.yaml"
+    path = Path(__file__).resolve().parents[1] / "scripts/locomotion_framework/configs/g1_quality_thresholds_v2_fps30.yaml"
     return yaml.safe_load(path.read_text())
 
 
-def _write_motion(root: Path, *, fps=50.0, corrupt_quat=False):
+def _write_motion(root: Path, *, fps=30.0, corrupt_quat=False):
     motion_dir = root / "stand_still_000_still_0000__K1"
     motion_dir.mkdir(parents=True)
     frames = 100
@@ -53,7 +53,7 @@ def test_bad_quaternion_is_rejected(tmp_path):
 
 
 def test_wrong_fps_is_rejected(tmp_path):
-    row = _write_motion(tmp_path, fps=30.0)
+    row = _write_motion(tmp_path, fps=50.0)
     result = validate_one(tmp_path, row, _thresholds())
     assert result["quality_tier"] == "rejected"
     assert "fps_mismatch" in result["reason_codes"]
@@ -67,3 +67,19 @@ def test_export_indices_match_manifest_order():
     ]
     _assign_global_indices(samples)
     assert [sample._global_idx for sample in samples] == [0, 1, 2]
+
+
+def test_generation_timing_accepts_native_fps_within_horizon():
+    _validate_generation_timing(30.0, [2.0, 8.0, 10.0], 30.0)
+
+
+def test_generation_timing_rejects_relabelled_fps():
+    import pytest
+    with pytest.raises(ValueError, match="native"):
+        _validate_generation_timing(50.0, [8.0], 30.0)
+
+
+def test_generation_timing_rejects_unsupported_horizon():
+    import pytest
+    with pytest.raises(ValueError, match="supported"):
+        _validate_generation_timing(30.0, [10.01], 30.0)

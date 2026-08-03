@@ -298,7 +298,6 @@ def _generate_batch(
 
     # ── Export per-sample (trim to actual duration — model pads to max in batch) ──
     for i, sample in enumerate(samples):
-        sample._global_idx = i  # assign proper index for filename stem
         single = {
             k: (v[i] if hasattr(v, "shape") and len(v.shape) > 0
                 and v.shape[0] == n else v)

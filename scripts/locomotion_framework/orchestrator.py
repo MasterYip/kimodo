@@ -34,6 +34,12 @@ from .constraints import build_constraints_json
 from .export_presets import get_preset, list_presets  # noqa: E402
 
 
+def _assign_global_indices(samples: list[SampledMotion]) -> None:
+    """Assign the manifest index used by the RLTracker export filename."""
+    for index, sample in enumerate(samples):
+        sample._global_idx = index
+
+
 # ── output helpers ───────────────────────────────────────────────
 
 
@@ -118,6 +124,7 @@ def run_generation(
     # Generate batch specs
     method = config.global_.sampling_method
     batch_specs = sampler.generate_batch_specs(method=method, rerank=config.global_.rerank)
+    _assign_global_indices([sample for samples in batch_specs.values() for sample in samples])
     total_motions = sum(len(s) for s in batch_specs.values())
     print(f"=== Locomotion Batch Generation ===")
     print(f"Model: {config.global_.model} | Sampling: {method} | Preset: {preset}")
@@ -313,7 +320,7 @@ def _generate_batch(
                 single=single,
                 model=model,
                 fps=fps,
-                sample_idx=i,
+                sample_idx=getattr(sample, "_global_idx", i),
                 sample=sample,
                 seed=seed_val,
                 output_base=out_dir,
@@ -513,6 +520,7 @@ def main():
         sampler = MotionSampler(config, seed=config.global_.seed)
         method = config.global_.sampling_method
         all_samples = sampler.generate_random_specs(args.num_total, method=method, rerank=config.global_.rerank)
+        _assign_global_indices(all_samples)
 
         print(f"=== Random Sample Mode (method={method}, preset={preset}) ===")
         print(f"Total: {args.num_total} motions across "

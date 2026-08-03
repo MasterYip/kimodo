@@ -6,6 +6,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from locomotion_framework.quality_validator import validate_one
+from locomotion_framework.orchestrator import _assign_global_indices
+from locomotion_framework.sampler import SampledMotion
 
 
 def _thresholds():
@@ -55,3 +57,13 @@ def test_wrong_fps_is_rejected(tmp_path):
     result = validate_one(tmp_path, row, _thresholds())
     assert result["quality_tier"] == "rejected"
     assert "fps_mismatch" in result["reason_codes"]
+
+
+def test_export_indices_match_manifest_order():
+    samples = [
+        SampledMotion("stand", "stand", 1.0, {}),
+        SampledMotion("walk", "walk", 1.0, {"vx": 0.3}),
+        SampledMotion("run", "run", 1.0, {"vx": 1.2}),
+    ]
+    _assign_global_indices(samples)
+    assert [sample._global_idx for sample in samples] == [0, 1, 2]

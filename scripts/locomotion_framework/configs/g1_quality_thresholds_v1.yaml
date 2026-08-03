@@ -1,0 +1,28 @@
+version: DATA-KIMODO-001-pilot-v1
+expected_fps: 50.0
+hard:
+  quaternion_norm_error: 0.001
+  pelvis_height_min: 0.35
+  torso_height_min: 0.55
+  ground_penetration_min: -0.12
+  joint_abs_max: 3.30
+  joint_velocity_abs_max: 35.0
+  arm_abduction_abs_max: 1.35
+soft:
+  pelvis_height_min: 0.50
+  torso_height_min: 0.75
+  crouched_torso_height_min: 0.58
+  ground_penetration_min: -0.05
+  joint_velocity_abs_max: 20.0
+  foot_slip_mean_max: 0.30
+  arm_abduction_abs_max: 0.90
+  arm_excursion_min: 0.08
+  arm_phase_strength_min: 0.15
+  gait_periodicity_min: 0.10
+command_tolerance:
+  default: {vx: 0.20, vy: 0.10, wz: 0.15}
+  stand: {vx: 0.08, vy: 0.08, wz: 0.08}
+  stand_turn: {vx: 0.10, vy: 0.10, wz: 0.20}
+  jog: {vx: 0.25, vy: 0.10, wz: 0.15}
+  run: {vx: 0.35, vy: 0.10, wz: 0.15}
+research_quarantine_types: [side_step]

@@ -1,0 +1,33 @@
+global:
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 20260803
+  fps: 30
+  output_dir: /data/masteryip/kimodo/datasets/DATA-KIMODO-LOCOMOTION-YAML-004/normal_directional_arms_20260805_raw/y12_exactarms_disabled_normal_s20260803
+  sampling_method: uniform
+  export_preset: rltracker
+  root2d_constraint:
+    enabled: false
+    stride: 1
+
+motion_types:
+  forward:
+    description: "A person walks forward"
+    prompt: "A person walks forward with natural alternating forward and backward arm swing."
+    duration: [8.0, 8.0]
+    vel_cmd:
+      vx: [0.50, 0.50]
+      vy: [0.0, 0.0]
+      wz: [0.0, 0.0]
+    styles: []
+    num_samples: 1
+  right:
+    description: "A person walks to the right"
+    prompt: "A person walks to the right with natural alternating left and right arm swing and slight fore-aft clearance."
+    duration: [8.0, 8.0]
+    vel_cmd:
+      vx: [0.0, 0.0]
+      vy: [0.35, 0.35]
+      wz: [0.0, 0.0]
+    styles: []
+    num_samples: 1

@@ -364,3 +364,32 @@ samples = sampler.generate_random_specs(50)
 for s in samples[:5]:
     print(f"[{s.motion_type}] {s.prompt} | vel={s.vel}")
 ```
+
+## Exact prompts, directional arm intent, and evaluation
+
+Each motion type may set `prompt` to a non-empty literal final prompt. It
+bypasses speed, style, torso-height, and arm-swing text composition. Otherwise,
+`arm_swing: auto|sagittal|lateral|none` adds prompt-only intent. `auto` maps
+forward/backward (`|vx| >= |vy|`) to alternating forward/backward swing and
+left/right travel to alternating left/right swing with slight fore-aft
+clearance. These fields are text intent, not physical arm constraints.
+
+Evaluate any native `rltracker` output root deterministically:
+
+```bash
+PYTHONPATH=scripts python -m locomotion_framework.evaluation.cli \
+  /path/to/framework/output \
+  --output-dir /path/to/evaluation \
+  --per-motion-plots \
+  --comparison y0_disabled --comparison y2_sparse4
+```
+
+The evaluator writes CSV/JSON, optional per-motion wrist plots, and a compact
+comparison panel. Coordinates are pelvis-local `+X` forward, `+Y` left/lateral,
+`+Z` up after inverse pelvis yaw. Arm/hip/torso and wrist-overlap distances use
+body/link centers; they are diagnostic proxies, not mesh-collision evidence.
+
+CSV/JSON evaluation requires only NumPy. Plotting is an optional feature and
+requires Matplotlib; when the generation environment omits it, run the same CLI
+against the checksum-verified output on an analysis environment with
+Matplotlib installed.

@@ -133,6 +133,8 @@ def _lhs_sample_from_spec(
             style,
             torso_height=torso_height if (torso_height is not None and spec.name != "stand") else None,
             vel=vel,
+            exact_prompt=spec.prompt_override,
+            arm_swing=spec.arm_swing,
         )
 
         samples.append(SampledMotion(
@@ -175,6 +177,8 @@ class MotionSampler:
             style,
             torso_height=torso_height if (torso_height is not None and spec.name != "stand") else None,
             vel=vel,
+            exact_prompt=spec.prompt_override,
+            arm_swing=spec.arm_swing,
         )
 
         return SampledMotion(
@@ -252,6 +256,8 @@ class MotionSampler:
                 spec_copy = MotionSpec(
                     name=spec.name,
                     description=spec.description,
+                    prompt_override=spec.prompt_override,
+                    arm_swing=spec.arm_swing,
                     duration_range=spec.duration_range,
                     vel_cmd=dict(spec.vel_cmd),
                     torso_height_range=spec.torso_height_range,

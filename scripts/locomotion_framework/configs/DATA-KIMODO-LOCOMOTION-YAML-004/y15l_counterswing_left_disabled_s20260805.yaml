@@ -1,0 +1,19 @@
+global:
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 20260805
+  fps: 30
+  output_dir: /data/masteryip/kimodo/datasets/DATA-KIMODO-LOCOMOTION-YAML-004/lateral_prompt_sweep_20260805_raw/y15l_counterswing_left_disabled_s20260805
+  sampling_method: uniform
+  export_preset: rltracker
+  root2d_constraint:
+    enabled: false
+    stride: 1
+motion_types:
+  left:
+    description: "A person sidesteps to the left"
+    prompt: "A person sidesteps to the left while facing forward with small relaxed alternating arm counter-swing along the side-step direction and slight forward and backward clearance from the body."
+    duration: [8.0, 8.0]
+    vel_cmd: {vx: [0.0, 0.0], vy: [-0.35, -0.35], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1

@@ -1,0 +1,34 @@
+global:
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 20260803
+  fps: 30
+  output_dir: /data/masteryip/kimodo/datasets/DATA-KIMODO-LOCOMOTION-YAML-004/torso070_20260805_raw/y6_disabled_torso070_s20260803
+  sampling_method: uniform
+  export_preset: rltracker
+  root2d_constraint:
+    enabled: false
+    stride: 1
+
+motion_types:
+  forward:
+    description: "A person walks forward"
+    duration: [8.0, 8.0]
+    vel_cmd:
+      vx: [0.50, 0.50]
+      vy: [0.0, 0.0]
+      wz: [0.0, 0.0]
+    torso_height: [0.70, 0.70]
+    styles: []
+    num_samples: 1
+  right:
+    description: "A person walks to the right"
+    duration: [8.0, 8.0]
+    vel_cmd:
+      vx: [0.0, 0.0]
+      vy: [0.35, 0.35]
+      wz: [0.0, 0.0]
+    torso_height: [0.70, 0.70]
+    styles: []
+    num_samples: 1
+

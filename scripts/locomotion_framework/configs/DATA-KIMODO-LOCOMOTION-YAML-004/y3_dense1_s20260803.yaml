@@ -1,0 +1,32 @@
+global:
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 20260803
+  fps: 30
+  output_dir: /data/masteryip/kimodo/datasets/DATA-KIMODO-LOCOMOTION-YAML-004/yaml_sweep_20260805_raw/y3_dense1_s20260803
+  sampling_method: uniform
+  export_preset: rltracker
+  root2d_constraint:
+    enabled: true
+    stride: 1
+
+motion_types:
+  forward:
+    description: "A person walks forward"
+    duration: [8.0, 8.0]
+    vel_cmd:
+      vx: [0.50, 0.50]
+      vy: [0.0, 0.0]
+      wz: [0.00, 0.00]
+    styles: []
+    num_samples: 1
+  right:
+    description: "A person walks to the right"
+    duration: [8.0, 8.0]
+    vel_cmd:
+      vx: [0.0, 0.0]
+      vy: [0.35, 0.35]
+      wz: [0.00, 0.00]
+    styles: []
+    num_samples: 1
+

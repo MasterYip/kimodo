@@ -129,6 +129,9 @@ global:
   output_dir: outputs/normal_loco
   sampling_method: lhs          # "uniform" or "lhs" (Latin Hypercube Sampling)
   export_preset: rltracker      # "kimodo" or "rltracker" (flat dirs + motion.npz)
+  root2d_constraint:
+    enabled: true               # legacy default; false keeps command metadata but emits no Root2D
+    stride: 1                   # legacy dense path; 2+ constrains every Nth frame plus endpoints
 
 motion_types:
   walk:
@@ -156,6 +159,15 @@ motion_types:
 
 ---
 
+
+### Root2D Constraint Settings
+
+`global.root2d_constraint.enabled` decouples sampled velocity metadata and
+prompt construction from Root2D injection. It defaults to `true`, preserving
+legacy behavior. `stride` defaults to `1`; values above one retain the first
+and last frame and constrain every Nth frame between them. The G1 skeleton
+root is the pelvis, so the locomotion framework does not expose separate
+root-only and pelvis-only factors. It also injects no upper-body constraint.
 ## How It Works
 
 ### 1. Distribution Sampling

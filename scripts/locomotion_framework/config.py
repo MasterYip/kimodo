@@ -36,6 +36,13 @@ class MotionSpec:
 
 
 @dataclass
+class Root2DConstraintConfig:
+    """Controls Root2D injection without changing sampled command metadata."""
+    enabled: bool = True
+    stride: int = 1
+
+
+@dataclass
 class GlobalConfig:
     """Global generation settings."""
     model: str = "kimodo-g1-rp"
@@ -49,6 +56,7 @@ class GlobalConfig:
     generate_margin: float = 0.0      # DEPRECATED: demo method uses exact duration, no margin
     rerank: str = ""                  # sort samples before generation: "vx", "vy", "wz",
                                       #   "speed" (|v|), "torso", "duration", or "" (no sort)
+    root2d_constraint: Root2DConstraintConfig = field(default_factory=Root2DConstraintConfig)
 
 
 @dataclass
@@ -65,6 +73,21 @@ def _parse_vel_cmd(raw: dict) -> dict[str, VelRange]:
         if key in raw:
             parsed[key] = VelRange.from_list(raw[key])
     return parsed
+
+
+def _parse_root2d_constraint(raw: dict | None) -> Root2DConstraintConfig:
+    """Parse and validate the additive Root2D settings."""
+    if raw is None:
+        return Root2DConstraintConfig()
+    if not isinstance(raw, dict):
+        raise ValueError("global.root2d_constraint must be a mapping")
+    enabled = raw.get("enabled", True)
+    stride = raw.get("stride", 1)
+    if not isinstance(enabled, bool):
+        raise ValueError("global.root2d_constraint.enabled must be boolean")
+    if not isinstance(stride, int) or isinstance(stride, bool) or stride < 1:
+        raise ValueError("global.root2d_constraint.stride must be an integer >= 1")
+    return Root2DConstraintConfig(enabled=enabled, stride=stride)
 
 
 def load_config(path: str | Path) -> LocomotionConfig:
@@ -91,6 +114,7 @@ def load_config(path: str | Path) -> LocomotionConfig:
         export_preset=global_raw.get("export_preset", "kimodo"),
         generate_margin=global_raw.get("generate_margin", 2.0),
         rerank=global_raw.get("rerank", ""),
+        root2d_constraint=_parse_root2d_constraint(global_raw.get("root2d_constraint")),
     )
 
     motion_types = {}

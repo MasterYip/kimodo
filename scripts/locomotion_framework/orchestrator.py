@@ -292,9 +292,11 @@ def _generate_batch(
     seed_val = config.global_.seed if config.global_.seed is not None else 0
     batch_seed = seed_val + min(getattr(sample, "_global_idx", 0) for sample in samples)
     seed_everything(batch_seed, deterministic=True)
+    root2d_cfg = config.global_.root2d_constraint
     print(
         f"  Provenance: resolved_model={resolved_name} native_fps={model_fps:g} "
-        f"batch_seed={batch_seed} max_duration_s={KIMODO_MAX_DURATION_S:g}"
+        f"batch_seed={batch_seed} max_duration_s={KIMODO_MAX_DURATION_S:g} "
+        f"root2d_enabled={root2d_cfg.enabled} root2d_stride={root2d_cfg.stride}"
     )
 
     # ── Build per-sample lists (demo 05_root_path method) ────────────
@@ -306,7 +308,10 @@ def _generate_batch(
         per_prompts.append(s.prompt)
         per_frames.append(int(round(s.duration * fps)))
         per_constraints_raw.append(
-            build_constraints_json(s, fps=fps)
+            build_constraints_json(
+                s, fps=fps, enabled=root2d_cfg.enabled,
+                stride=root2d_cfg.stride,
+            )
         )
 
     # Convert to Kimodo constraint objects

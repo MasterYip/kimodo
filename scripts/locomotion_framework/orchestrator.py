@@ -3,9 +3,9 @@
 Usage:
     cd /data/masteryip/kimodo/kimodo
     source scripts/env.sh
-    PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
+    PYTHONPATH=scripts python3 -m locomotion_framework.orchestrator \
         --config scripts/locomotion_framework/configs/g1_locomotion.yaml
-    PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
+    PYTHONPATH=scripts python3 -m locomotion_framework.orchestrator \
         --config scripts/locomotion_framework/configs/g1_locomotion.yaml --dry-run
 """
 
@@ -32,6 +32,34 @@ from .constraints import build_constraints_json
 
 # Import export preset registry (populates _registry)
 from .export_presets import get_preset, list_presets  # noqa: E402
+
+
+KIMODO_MAX_DURATION_S = 10.0
+
+
+def _validate_generation_timing(
+    configured_fps: float,
+    durations: list[float],
+    model_fps: float,
+) -> None:
+    """Reject FPS mismatches and clips beyond Kimodo's supported horizon."""
+    if not np.isclose(float(configured_fps), float(model_fps), atol=1e-8):
+        raise ValueError(
+            f"Configured fps={configured_fps:g} does not match the loaded model's native "
+            f"fps={model_fps:g}. Kimodo frames must not be relabeled or temporally compressed."
+        )
+    too_long = [duration for duration in durations if duration > KIMODO_MAX_DURATION_S + 1e-8]
+    if too_long:
+        raise ValueError(
+            f"Requested duration {max(too_long):g}s exceeds Kimodo's supported "
+            f"{KIMODO_MAX_DURATION_S:g}s horizon ({int(round(model_fps * KIMODO_MAX_DURATION_S))} frames)."
+        )
+
+
+def _assign_global_indices(samples: list[SampledMotion]) -> None:
+    """Assign the manifest index used by the RLTracker export filename."""
+    for index, sample in enumerate(samples):
+        sample._global_idx = index
 
 
 # ── output helpers ───────────────────────────────────────────────
@@ -118,6 +146,7 @@ def run_generation(
     # Generate batch specs
     method = config.global_.sampling_method
     batch_specs = sampler.generate_batch_specs(method=method, rerank=config.global_.rerank)
+    _assign_global_indices([sample for samples in batch_specs.values() for sample in samples])
     total_motions = sum(len(s) for s in batch_specs.values())
     print(f"=== Locomotion Batch Generation ===")
     print(f"Model: {config.global_.model} | Sampling: {method} | Preset: {preset}")
@@ -243,6 +272,7 @@ def _generate_batch(
     """
     from kimodo import load_model
     from kimodo.constraints import load_constraints_lst
+    from kimodo.tools import seed_everything
 
     # Load model once per batch
     model, resolved_name = load_model(
@@ -252,8 +282,22 @@ def _generate_batch(
     )
 
     n = len(samples)
-    fps = config.global_.fps
+    model_fps = float(model.motion_rep.fps)
+    _validate_generation_timing(
+        config.global_.fps,
+        [float(sample.duration) for sample in samples],
+        model_fps,
+    )
+    fps = model_fps
     seed_val = config.global_.seed if config.global_.seed is not None else 0
+    batch_seed = seed_val + min(getattr(sample, "_global_idx", 0) for sample in samples)
+    seed_everything(batch_seed, deterministic=True)
+    root2d_cfg = config.global_.root2d_constraint
+    print(
+        f"  Provenance: resolved_model={resolved_name} native_fps={model_fps:g} "
+        f"batch_seed={batch_seed} max_duration_s={KIMODO_MAX_DURATION_S:g} "
+        f"root2d_enabled={root2d_cfg.enabled} root2d_stride={root2d_cfg.stride}"
+    )
 
     # ── Build per-sample lists (demo 05_root_path method) ────────────
     per_prompts: list[str] = []
@@ -264,7 +308,10 @@ def _generate_batch(
         per_prompts.append(s.prompt)
         per_frames.append(int(round(s.duration * fps)))
         per_constraints_raw.append(
-            build_constraints_json(s, fps=fps)
+            build_constraints_json(
+                s, fps=fps, enabled=root2d_cfg.enabled,
+                stride=root2d_cfg.stride,
+            )
         )
 
     # Convert to Kimodo constraint objects
@@ -291,7 +338,6 @@ def _generate_batch(
 
     # ── Export per-sample (trim to actual duration — model pads to max in batch) ──
     for i, sample in enumerate(samples):
-        sample._global_idx = i  # assign proper index for filename stem
         single = {
             k: (v[i] if hasattr(v, "shape") and len(v.shape) > 0
                 and v.shape[0] == n else v)
@@ -313,7 +359,7 @@ def _generate_batch(
                 single=single,
                 model=model,
                 fps=fps,
-                sample_idx=i,
+                sample_idx=getattr(sample, "_global_idx", i),
                 sample=sample,
                 seed=seed_val,
                 output_base=out_dir,
@@ -513,6 +559,7 @@ def main():
         sampler = MotionSampler(config, seed=config.global_.seed)
         method = config.global_.sampling_method
         all_samples = sampler.generate_random_specs(args.num_total, method=method, rerank=config.global_.rerank)
+        _assign_global_indices(all_samples)
 
         print(f"=== Random Sample Mode (method={method}, preset={preset}) ===")
         print(f"Total: {args.num_total} motions across "

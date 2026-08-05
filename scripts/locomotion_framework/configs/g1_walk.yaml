@@ -2,7 +2,7 @@ global:
   model: kimodo-g1-rp
   diffusion_steps: 100
   seed: 42
-  output_dir: outputs/normal_loco
+  output_dir: outputs/g1_low_walk
   sampling_method: lhs   # Latin Hypercube Sampling for coverage
   rerank: speed
   export_preset: rltracker  # RLTracker dataset format (flat dirs, motion.npz)
@@ -14,12 +14,12 @@ motion_types:
     description: "a robot walking"
     duration: [8.0, 8.0]
     vel_cmd:
-      vx: [-1.0, 2.0]
-      vy: [-1.0, 1.0]
-      wz: [-0.8, 0.8]
-    torso_height: [0.4, 0.9]
+      vx: [-0.5, 0.5]
+      vy: [-0.5, 0.5]
+      wz: [-0.5, 0.5]
+    torso_height: [0.4, 0.6]
     styles:
       - "normally"
       - "at a steady pace"
     weight: 0.5
-    num_samples: 200
+    num_samples: 40

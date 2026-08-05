@@ -1,0 +1,75 @@
+# DATA-KIMODO-001 conservative quality pilot, calibration seed.
+global:
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 20260803
+  fps: 30
+  output_dir: outputs/kimodo_g1_loco_qv2_20260803_fps30_micro_s20260803_raw
+  sampling_method: lhs
+  rerank: speed
+  export_preset: rltracker
+
+motion_types:
+  stand:
+    description: "a robot stands upright"
+    duration: [8.0, 8.0]
+    vel_cmd: {vx: [0.0, 0.0], vy: [0.0, 0.0], wz: [-0.03, 0.03]}
+    torso_height: [0.82, 0.88]
+    styles: ["steadily"]
+    num_samples: 1
+  stand_turn:
+    description: "a robot turns in place while standing upright"
+    duration: [8.0, 8.0]
+    vel_cmd: {vx: [0.0, 0.0], vy: [0.0, 0.0], wz: [-0.40, 0.40]}
+    torso_height: [0.82, 0.88]
+    styles: ["steadily"]
+    num_samples: 1
+  forward_walk_straight:
+    description: "a robot walks forward upright"
+    duration: [8.0, 8.0]
+    vel_cmd: {vx: [0.20, 0.60], vy: [0.0, 0.0], wz: [0.0, 0.0]}
+    torso_height: [0.76, 0.84]
+    styles: ["naturally", "at a steady pace"]
+    num_samples: 1
+  forward_walk_turn:
+    description: "a robot walks forward along a gentle curve while upright"
+    duration: [8.0, 8.0]
+    vel_cmd: {vx: [0.25, 0.50], vy: [0.0, 0.0], wz: [-0.15, 0.15]}
+    torso_height: [0.76, 0.84]
+    styles: ["naturally", "at a steady pace"]
+    num_samples: 1
+  backward_walk:
+    description: "a robot walks backward carefully while upright"
+    duration: [8.0, 8.0]
+    vel_cmd: {vx: [-0.30, -0.15], vy: [0.0, 0.0], wz: [-0.08, 0.08]}
+    torso_height: [0.76, 0.84]
+    styles: ["naturally", "carefully"]
+    num_samples: 1
+  jog:
+    description: "a robot jogs forward upright"
+    duration: [8.0, 8.0]
+    vel_cmd: {vx: [0.70, 1.00], vy: [0.0, 0.0], wz: [-0.08, 0.08]}
+    torso_height: [0.74, 0.82]
+    styles: ["naturally", "steadily"]
+    num_samples: 1
+  run:
+    description: "a robot runs forward upright"
+    duration: [8.0, 8.0]
+    vel_cmd: {vx: [1.15, 1.50], vy: [0.0, 0.0], wz: [-0.05, 0.05]}
+    torso_height: [0.72, 0.80]
+    styles: ["naturally", "steadily"]
+    num_samples: 1
+  crouched_walk:
+    description: "a robot crouch-walks forward while deliberately staying low"
+    duration: [8.0, 8.0]
+    vel_cmd: {vx: [0.15, 0.30], vy: [0.0, 0.0], wz: [-0.05, 0.05]}
+    torso_height: [0.64, 0.70]
+    styles: ["carefully"]
+    num_samples: 1
+  side_step:
+    description: "a robot side-steps while facing forward"
+    duration: [8.0, 8.0]
+    vel_cmd: {vx: [0.0, 0.0], vy: [-0.18, 0.18], wz: [0.0, 0.0]}
+    torso_height: [0.76, 0.84]
+    styles: ["carefully"]
+    num_samples: 1

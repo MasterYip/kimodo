@@ -21,6 +21,9 @@ export HF_ENDPOINT=https://hf-mirror.com
 
 # ---- Text encoder: standalone NF4 model (no gated Llama dependency) ----
 export TEXT_ENCODER=llm2vec-nf4
+# Use the declared local NF4 encoder directly. Avoid the default "auto" mode,
+# which first probes an unavailable API service and silently falls back.
+export TEXT_ENCODER_MODE="${TEXT_ENCODER_MODE:-local}"
 
 # ---- Cache paths ----
 export HF_HOME="${KIMODO_ROOT}/../.cache/huggingface"
@@ -28,4 +31,4 @@ export HF_HOME="${KIMODO_ROOT}/../.cache/huggingface"
 # ---- GPU defaults ----
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 
-echo "[kimodo] HF_ENDPOINT=${HF_ENDPOINT}  TEXT_ENCODER=${TEXT_ENCODER}"
+echo "[kimodo] HF_ENDPOINT=${HF_ENDPOINT}  TEXT_ENCODER=${TEXT_ENCODER}  TEXT_ENCODER_MODE=${TEXT_ENCODER_MODE}"

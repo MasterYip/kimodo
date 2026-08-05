@@ -13,19 +13,19 @@ cd /data/masteryip/kimodo/kimodo
 source scripts/env.sh
 
 # Dry run — see what will be generated with naming preview
-PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
+PYTHONPATH=scripts python3 -m locomotion_framework.orchestrator \
     -c scripts/locomotion_framework/configs/g1_normal_loco.yaml --dry-run --preset rltracker
 
 # Generate full batch (all motion types, single GPU)
-PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
+PYTHONPATH=scripts python3 -m locomotion_framework.orchestrator \
     -c scripts/locomotion_framework/configs/g1_normal_loco.yaml --preset rltracker
 
 # Generate exactly 100 motions (random weighted selection)
-PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
+PYTHONPATH=scripts python3 -m locomotion_framework.orchestrator \
     -c scripts/locomotion_framework/configs/g1_normal_loco.yaml -n 100
 
 # Use a specific GPU
-PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
+PYTHONPATH=scripts python3 -m locomotion_framework.orchestrator \
     -c scripts/locomotion_framework/configs/g1_normal_loco.yaml -g 1
 ```
 
@@ -129,6 +129,9 @@ global:
   output_dir: outputs/normal_loco
   sampling_method: lhs          # "uniform" or "lhs" (Latin Hypercube Sampling)
   export_preset: rltracker      # "kimodo" or "rltracker" (flat dirs + motion.npz)
+  root2d_constraint:
+    enabled: true               # legacy default; false keeps command metadata but emits no Root2D
+    stride: 1                   # legacy dense path; 2+ constrains every Nth frame plus endpoints
 
 motion_types:
   walk:
@@ -156,6 +159,15 @@ motion_types:
 
 ---
 
+
+### Root2D Constraint Settings
+
+`global.root2d_constraint.enabled` decouples sampled velocity metadata and
+prompt construction from Root2D injection. It defaults to `true`, preserving
+legacy behavior. `stride` defaults to `1`; values above one retain the first
+and last frame and constrain every Nth frame between them. The G1 skeleton
+root is the pelvis, so the locomotion framework does not expose separate
+root-only and pelvis-only factors. It also injects no upper-body constraint.
 ## How It Works
 
 ### 1. Distribution Sampling
@@ -303,7 +315,7 @@ outputs/locomotion/
 
 ```bash
 # Run on generated output
-PYTHONPATH=. python3 scripts/locomotion_framework/analyze_quality.py outputs/normal_loco
+PYTHONPATH=scripts python3 scripts/locomotion_framework/analyze_quality.py outputs/normal_loco
 ```
 
 Metrics computed:
@@ -352,3 +364,32 @@ samples = sampler.generate_random_specs(50)
 for s in samples[:5]:
     print(f"[{s.motion_type}] {s.prompt} | vel={s.vel}")
 ```
+
+## Exact prompts, directional arm intent, and evaluation
+
+Each motion type may set `prompt` to a non-empty literal final prompt. It
+bypasses speed, style, torso-height, and arm-swing text composition. Otherwise,
+`arm_swing: auto|sagittal|lateral|none` adds prompt-only intent. `auto` maps
+forward/backward (`|vx| >= |vy|`) to alternating forward/backward swing and
+left/right travel to alternating left/right swing with slight fore-aft
+clearance. These fields are text intent, not physical arm constraints.
+
+Evaluate any native `rltracker` output root deterministically:
+
+```bash
+PYTHONPATH=scripts python -m locomotion_framework.evaluation.cli \
+  /path/to/framework/output \
+  --output-dir /path/to/evaluation \
+  --per-motion-plots \
+  --comparison y0_disabled --comparison y2_sparse4
+```
+
+The evaluator writes CSV/JSON, optional per-motion wrist plots, and a compact
+comparison panel. Coordinates are pelvis-local `+X` forward, `+Y` left/lateral,
+`+Z` up after inverse pelvis yaw. Arm/hip/torso and wrist-overlap distances use
+body/link centers; they are diagnostic proxies, not mesh-collision evidence.
+
+CSV/JSON evaluation requires only NumPy. Plotting is an optional feature and
+requires Matplotlib; when the generation environment omits it, run the same CLI
+against the checksum-verified output on an analysis environment with
+Matplotlib installed.

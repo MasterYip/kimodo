@@ -115,6 +115,7 @@ def build_constraints_json(
     fps: int = 30,
     duration_override: float | None = None,
     stride: int | None = None,
+    enabled: bool = True,
 ) -> list[dict]:
     """Build the full constraints list for a sampled motion.
 
@@ -126,12 +127,13 @@ def build_constraints_json(
                            generate-and-truncate mode).
         stride:            Override constraint stride (None = use default).
                            stride=1 for dense, stride=3+ for sparse.
+        enabled:           False emits no Root2D while preserving ``sample.vel``.
     """
     constraints = []
     duration = duration_override if duration_override is not None else sample.duration
     kw = {"stride": stride} if stride is not None else {}
 
-    if sample.vel and any(abs(v) > 1e-6 for v in sample.vel.values()):
+    if enabled and sample.vel and any(abs(v) > 1e-6 for v in sample.vel.values()):
         root_constraint = build_root2d_constraint(
             sample.vel, duration, fps=fps, **kw
         )

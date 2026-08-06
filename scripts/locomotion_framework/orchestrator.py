@@ -65,6 +65,13 @@ def _assign_global_indices(samples: list[SampledMotion]) -> None:
 # ── output helpers ───────────────────────────────────────────────
 
 
+def _polar_components(vel: dict[str, float]) -> tuple[float, float]:
+    """Return planar speed and direction in degrees from sampled vx/vy."""
+    vx = vel.get("vx", 0.0)
+    vy = vel.get("vy", 0.0)
+    return float(np.hypot(vx, vy)), float(np.degrees(np.arctan2(vy, vx)))
+
+
 def _save_metadata(out_dir: Path, samples: list[SampledMotion]) -> None:
     """Save a metadata JSON summarizing the generated samples."""
     metadata = {
@@ -79,6 +86,8 @@ def _save_metadata(out_dir: Path, samples: list[SampledMotion]) -> None:
             "prompt": s.prompt,
             "duration_s": round(s.duration, 2),
             "vel": {k: round(v, 4) for k, v in s.vel.items()},
+            "speed_mps": round(_polar_components(s.vel)[0], 4),
+            "direction_deg": round(_polar_components(s.vel)[1], 4),
             "torso_height": round(s.torso_height, 3) if s.torso_height is not None else None,
             "style": s.style,
             "diffusion_steps": s.diffusion_steps,
@@ -96,7 +105,7 @@ def _save_manifest(csv_path: Path, all_samples: list[SampledMotion],
         writer = csv.writer(f)
         writer.writerow([
             "index", "motion_type", "prompt", "duration_s",
-            "vx", "vy", "wz", "torso_height", "style",
+            "vx", "vy", "wz", "speed_mps", "direction_deg", "torso_height", "style",
             "path",
         ])
         for i, s in enumerate(all_samples):
@@ -114,6 +123,8 @@ def _save_manifest(csv_path: Path, all_samples: list[SampledMotion],
                 round(s.vel.get("vx", 0), 4),
                 round(s.vel.get("vy", 0), 4),
                 round(s.vel.get("wz", 0), 4),
+                round(_polar_components(s.vel)[0], 4),
+                round(_polar_components(s.vel)[1], 4),
                 round(s.torso_height, 3) if s.torso_height is not None else "",
                 s.style,
                 path_str,
@@ -235,6 +246,10 @@ def run_generation(
         print(f"  ✓ Generated in {elapsed:.1f}s ({elapsed/n:.2f}s/sample)")
 
         all_samples.extend(samples)
+
+    if dry_run:
+        print(f"Dry run complete: {total_motions} sampled motions; no files written.")
+        return
 
     # Save manifest
     _save_manifest(output_base / "manifest.csv", all_samples,

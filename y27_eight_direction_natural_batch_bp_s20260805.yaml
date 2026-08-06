@@ -1,0 +1,81 @@
+best_practices_check: &bp
+  official_url: https://research.nvidia.com/labs/sil/projects/kimodo/docs/key_concepts/limitations.html
+  status: launch
+  causal_stage: yaml_root2d_disabled
+  prompt_begins_a_person: true
+  focused_behavior_count: 1
+  focused_behaviors_lte2: true
+  medium_detail: true
+  self_contained: true
+  duration_lte_10s: true
+  text_constraint_consistent: true
+  max_keyframes_per_constraint_type: 0
+  constraint_types_lt_20_keyframes: true
+  cfg: {type: separated, text_weight: 2.0, constraint_weight: 2.0, tuned: false}
+  g1_postprocessing_not_assumed: true
+global: &global
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 20260805
+  fps: 30
+  output_dir: /data/masteryip/kimodo/datasets/DATA-KIMODO-LOCOMOTION-YAML-004/eight_direction_natural_6s_20260806_raw
+  sampling_method: uniform
+  export_preset: rltracker
+  root2d_constraint: {enabled: false, stride: 1}
+motion_types:
+  d00_forward:
+    description: "A person advances forward using athletic videogame combat steps"
+    prompt: "A person advances forward using athletic videogame combat steps."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [0.35, 0.35], vy: [0.0, 0.0], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+  d01_forward_right:
+    description: "A person moves diagonally forward and right using athletic crossover steps"
+    prompt: "A person moves diagonally forward and right using athletic crossover steps."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [0.247487, 0.247487], vy: [0.247487, 0.247487], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+  d02_right:
+    description: "A person moves to the right using athletic crossover steps"
+    prompt: "A person moves to the right using athletic crossover steps."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [0.0, 0.0], vy: [0.35, 0.35], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+  d03_backward_right:
+    description: "A person moves diagonally backward and right using athletic crossover steps"
+    prompt: "A person moves diagonally backward and right using athletic crossover steps."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [-0.247487, -0.247487], vy: [0.247487, 0.247487], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+  d04_backward:
+    description: "A person retreats backward using athletic videogame combat steps"
+    prompt: "A person retreats backward using athletic videogame combat steps."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [-0.35, -0.35], vy: [0.0, 0.0], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+  d05_backward_left:
+    description: "A person moves diagonally backward and left using athletic crossover steps"
+    prompt: "A person moves diagonally backward and left using athletic crossover steps."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [-0.247487, -0.247487], vy: [-0.247487, -0.247487], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+  d06_left:
+    description: "A person moves to the left using athletic crossover steps"
+    prompt: "A person moves to the left using athletic crossover steps."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [0.0, 0.0], vy: [-0.35, -0.35], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+  d07_forward_left:
+    description: "A person moves diagonally forward and left using athletic crossover steps"
+    prompt: "A person moves diagonally forward and left using athletic crossover steps."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [0.247487, 0.247487], vy: [-0.247487, -0.247487], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1

@@ -1,0 +1,17 @@
+global:
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 20260805
+  fps: 30
+  output_dir: /data/masteryip/kimodo/datasets/DATA-KIMODO-LOCOMOTION-YAML-004/sports_crossover_20260806_raw/y20l_carioca_behind_left_disabled_s20260805
+  sampling_method: uniform
+  export_preset: rltracker
+  root2d_constraint: {enabled: false, stride: 1}
+motion_types:
+  left:
+    description: "An athlete performs behind-cross carioca steps to the left"
+    prompt: "An athlete moves laterally to the left using behind-cross carioca steps, with the trailing right leg crossing behind the left support leg while the torso stays mostly facing forward, using natural counterbalancing arm swing with both hands outside the pelvis and hips and away from the body centerline and crotch."
+    duration: [8.0, 8.0]
+    vel_cmd: {vx: [0.0, 0.0], vy: [-0.35, -0.35], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1

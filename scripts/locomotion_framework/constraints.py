@@ -139,6 +139,22 @@ def build_constraints_json(
         )
         constraints.append(root_constraint)
 
+    # Optional native left-hand/right-hand EndEffector constraint set.
+    # Sample-level path to a JSON list of constraint dicts (schema emitted by
+    # EndEffectorConstraintSet.get_save_info). Loaded and validated downstream
+    # by kimodo.constraints.load_constraints_lst.
+    hand_file = getattr(sample, "hand_constraints_file", None)
+    if hand_file:
+        import json as _json
+
+        with open(hand_file) as _f:
+            hand_constraints = _json.load(_f)
+        if not isinstance(hand_constraints, list) or not hand_constraints:
+            raise ValueError(
+                f"hand_constraints_file {hand_file} must be a non-empty JSON list"
+            )
+        constraints.extend(hand_constraints)
+
     return constraints
 
 

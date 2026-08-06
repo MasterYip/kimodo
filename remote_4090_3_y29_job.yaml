@@ -1,0 +1,44 @@
+name: data-kimodo-eight-direction-y29-20260806
+project: pegasusmodye
+description: "Y29 eight-direction normal-walk + hand EndEffector constraint Kimodo locomotion_framework batch on 4090-3 GPU 1 (experimental)"
+
+defaults:
+  work_dir: /data/masteryip/kimodo/kimodo-agent-worktrees/DATA-KIMODO-LOCOMOTION-YAML-004
+  python: /data/masteryip/kimodo/.venv/bin/python
+  cfg: /data/masteryip/kimodo/kimodo-agent-worktrees/DATA-KIMODO-LOCOMOTION-YAML-004/scripts/locomotion_framework/configs/DATA-KIMODO-LOCOMOTION-YAML-004/y29_eight_direction_hand_constraint_bp_s20260805.yaml
+  log_dir: /tmp/gpu-jobs
+  env:
+    CUDA_VISIBLE_DEVICES: "1"
+    PYTHONUNBUFFERED: "1"
+  overrides: {}
+
+command: |
+  set -eu
+  exec > {log_file} 2>&1
+  batch_root=/data/masteryip/kimodo/datasets/DATA-KIMODO-LOCOMOTION-YAML-004/eight_direction_hand_constraint_6s_20260806_raw
+  config_path={cfg}
+  echo START_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  echo HOST=$(hostname)
+  echo GPU=$CUDA_VISIBLE_DEVICES
+  echo HEAD=$(git -C {work_dir} rev-parse HEAD)
+  test "$(sha256sum "$config_path" | cut -d" " -f1)" = d6199723a20779b5b92184ed0f051f4d01536e09cf871048c98f8a8f09aae2c0
+  test ! -e "$batch_root"
+  cd {work_dir}
+  source scripts/env.sh
+  export LOCAL_CACHE=True
+  export TEXT_ENCODER_MODE=local
+  export TEXT_ENCODER=llm2vec-nf4
+  export GENERATION_SERVER_NAME=4090-3
+  PYTHONPATH=scripts python3 -m locomotion_framework.orchestrator -c "$config_path" --preset rltracker
+  test "$(find "$batch_root" -mindepth 2 -maxdepth 2 -type f -name motion.npz | wc -l)" -eq 8
+  test "$(wc -l < "$batch_root/manifest.csv")" -eq 9
+  find "$batch_root" -mindepth 2 -maxdepth 2 -type f -name motion.npz -print0 | sort -z | xargs -0 sha256sum > "$batch_root/SHA256SUMS"
+  sha256sum "$batch_root/manifest.csv" "$batch_root/SHA256SUMS"
+  echo END_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  echo Y29_BATCH_PASS
+
+tasks:
+  - name: kimodo-eight-direction-y29
+    # 18000 excludes every GPU except 4090-3 GPU 1 (19553 MiB free); GPU 5
+    # occasionally reports ~17.2 GiB free so 17000 would not pin GPU 1.
+    gpu_min_memory_mb: 18000

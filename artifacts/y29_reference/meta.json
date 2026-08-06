@@ -1,0 +1,18 @@
+{
+  "prompt": "A person walks forward at a normal walking gait with both arms stretched straight out horizontally to the sides at shoulder height, elbows locked, hands open, palms facing down, like a T-pose walk.",
+  "duration_s": 6.0,
+  "fps": 30,
+  "seed": 20260805,
+  "diffusion_steps": 100,
+  "cfg": [
+    2.0,
+    2.0
+  ],
+  "model": "kimodo-g1-rp",
+  "hand_y_median_m": 0.036710143089294434,
+  "left_wrist_y_median_m": 0.027816325426101685,
+  "right_wrist_y_median_m": 0.05997198820114136,
+  "pelvis_height_median_m": 0.7629345655441284,
+  "root_2d_travel_m": 4.387576103210449,
+  "note": "Reference motion used only to derive the Y29 hand-constraint arm pose; not a Y29 sample."
+}

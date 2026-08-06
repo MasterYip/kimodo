@@ -50,6 +50,7 @@ class MotionSpec:
     description: str = ""                  # base text prompt template; empty = unconstrained
     prompt_override: Optional[str] = None   # exact final prompt; bypasses composition
     arm_swing: str = "none"                 # text intent: auto/sagittal/lateral/none
+    hand_constraints_file: Optional[str] = None  # path to left-hand/right-hand constraint JSON
     duration_range: tuple[float, float] = (3.0, 8.0)  # (min, max) seconds
     vel_cmd: dict[str, VelRange] = field(default_factory=dict)  # {"vx": ..., "vy": ..., "wz": ...}
     torso_height_range: Optional[tuple[float, float]] = None  # (min, max) normalized; None = unconstrained
@@ -182,11 +183,15 @@ def load_config(path: str | Path) -> LocomotionConfig:
             raise ValueError(
                 f"motion_types.{name}.arm_swing must be auto/sagittal/lateral/none"
             )
+        hand_constraints_file = spec_raw.get("hand_constraints_file")
+        if hand_constraints_file is not None and not isinstance(hand_constraints_file, str):
+            raise ValueError(f"motion_types.{name}.hand_constraints_file must be a string path")
         spec = MotionSpec(
             name=name,
             description=spec_raw.get("description", ""),
             prompt_override=prompt_override.strip() if prompt_override is not None else None,
             arm_swing=arm_swing,
+            hand_constraints_file=hand_constraints_file,
             duration_range=tuple(spec_raw["duration"]) if "duration" in spec_raw else (3.0, 8.0),
             vel_cmd=_parse_vel_cmd(vel_raw),
             torso_height_range=tuple(spec_raw["torso_height"]) if "torso_height" in spec_raw else None,

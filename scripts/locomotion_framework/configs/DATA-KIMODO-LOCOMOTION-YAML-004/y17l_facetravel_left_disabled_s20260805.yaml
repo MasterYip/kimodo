@@ -1,0 +1,19 @@
+global:
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 20260805
+  fps: 30
+  output_dir: /data/masteryip/kimodo/datasets/DATA-KIMODO-LOCOMOTION-YAML-004/lateral_prompt_sweep_20260805_raw/y17l_facetravel_left_disabled_s20260805
+  sampling_method: uniform
+  export_preset: rltracker
+  root2d_constraint:
+    enabled: false
+    stride: 1
+motion_types:
+  left:
+    description: "A person walks to the left"
+    prompt: "A person turns the torso to face left and walks to the left naturally with relaxed alternating forward and backward arm swing and hands clear of the hips."
+    duration: [8.0, 8.0]
+    vel_cmd: {vx: [0.0, 0.0], vy: [-0.35, -0.35], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1

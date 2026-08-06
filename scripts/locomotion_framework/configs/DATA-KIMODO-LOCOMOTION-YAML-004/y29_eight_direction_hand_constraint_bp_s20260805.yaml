@@ -1,0 +1,91 @@
+best_practices_check: &bp
+  official_url: https://research.nvidia.com/labs/sil/projects/kimodo/docs/key_concepts/limitations.html
+  status: launch
+  causal_stage: yaml_root2d_disabled_hand_constraint
+  experimental: true
+  prompt_begins_a_person: true
+  focused_behavior_count: 1
+  focused_behaviors_lte2: true
+  medium_detail: true
+  self_contained: true
+  duration_lte_10s: true
+  text_constraint_consistent: true
+  max_keyframes_per_constraint_type: 19
+  constraint_types_lt_20_keyframes: true
+  cfg: {type: separated, text_weight: 2.0, constraint_weight: 2.0, tuned: false}
+  g1_postprocessing_not_assumed: true
+global: &global
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 20260805
+  fps: 30
+  output_dir: /data/masteryip/kimodo/datasets/DATA-KIMODO-LOCOMOTION-YAML-004/eight_direction_hand_constraint_6s_20260806_raw
+  sampling_method: uniform
+  export_preset: rltracker
+  experimental: true
+  root2d_constraint: {enabled: false, stride: 1}
+motion_types:
+  d00_forward:
+    description: "A person walks forward with a normal walking gait"
+    prompt: "A person walks forward with a normal walking gait."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [0.35, 0.35], vy: [0.0, 0.0], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+    hand_constraints_file: /data/masteryip/kimodo/kimodo-agent-worktrees/DATA-KIMODO-LOCOMOTION-YAML-004/artifacts/y29_constraints/d00_forward.constraints.json
+  d01_forward_right:
+    description: "A person walks diagonally forward and right with a normal walking gait"
+    prompt: "A person walks diagonally forward and right with a normal walking gait."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [0.247487, 0.247487], vy: [0.247487, 0.247487], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+    hand_constraints_file: /data/masteryip/kimodo/kimodo-agent-worktrees/DATA-KIMODO-LOCOMOTION-YAML-004/artifacts/y29_constraints/d01_forward_right.constraints.json
+  d02_right:
+    description: "A person walks to the right with a normal walking gait"
+    prompt: "A person walks to the right with a normal walking gait."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [0.0, 0.0], vy: [0.35, 0.35], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+    hand_constraints_file: /data/masteryip/kimodo/kimodo-agent-worktrees/DATA-KIMODO-LOCOMOTION-YAML-004/artifacts/y29_constraints/d02_right.constraints.json
+  d03_backward_right:
+    description: "A person walks diagonally backward and right with a normal walking gait"
+    prompt: "A person walks diagonally backward and right with a normal walking gait."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [-0.247487, -0.247487], vy: [0.247487, 0.247487], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+    hand_constraints_file: /data/masteryip/kimodo/kimodo-agent-worktrees/DATA-KIMODO-LOCOMOTION-YAML-004/artifacts/y29_constraints/d03_backward_right.constraints.json
+  d04_backward:
+    description: "A person walks backward with a normal walking gait"
+    prompt: "A person walks backward with a normal walking gait."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [-0.35, -0.35], vy: [0.0, 0.0], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+    hand_constraints_file: /data/masteryip/kimodo/kimodo-agent-worktrees/DATA-KIMODO-LOCOMOTION-YAML-004/artifacts/y29_constraints/d04_backward.constraints.json
+  d05_backward_left:
+    description: "A person walks diagonally backward and left with a normal walking gait"
+    prompt: "A person walks diagonally backward and left with a normal walking gait."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [-0.247487, -0.247487], vy: [-0.247487, -0.247487], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+    hand_constraints_file: /data/masteryip/kimodo/kimodo-agent-worktrees/DATA-KIMODO-LOCOMOTION-YAML-004/artifacts/y29_constraints/d05_backward_left.constraints.json
+  d06_left:
+    description: "A person walks to the left with a normal walking gait"
+    prompt: "A person walks to the left with a normal walking gait."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [0.0, 0.0], vy: [-0.35, -0.35], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+    hand_constraints_file: /data/masteryip/kimodo/kimodo-agent-worktrees/DATA-KIMODO-LOCOMOTION-YAML-004/artifacts/y29_constraints/d06_left.constraints.json
+  d07_forward_left:
+    description: "A person walks diagonally forward and left with a normal walking gait"
+    prompt: "A person walks diagonally forward and left with a normal walking gait."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [0.247487, 0.247487], vy: [-0.247487, -0.247487], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+    hand_constraints_file: /data/masteryip/kimodo/kimodo-agent-worktrees/DATA-KIMODO-LOCOMOTION-YAML-004/artifacts/y29_constraints/d07_forward_left.constraints.json

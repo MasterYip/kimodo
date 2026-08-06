@@ -1,5 +1,6 @@
 """Motion specification dataclasses and YAML config loading."""
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -29,6 +30,8 @@ class MotionSpec:
     prompt_override: Optional[str] = None   # exact final prompt; bypasses composition
     arm_swing: str = "none"                 # text intent: auto/sagittal/lateral/none
     hand_constraints_file: Optional[str] = None  # path to left-hand/right-hand constraint JSON
+    root2d_density: Optional[str] = None    # "dense" | "stride_N" | "endpoint" | None (inherit global stride)
+    root2d_heading_file: Optional[str] = None  # native npz/npy with global_root_heading (C5-style paired heading)
     duration_range: tuple[float, float] = (3.0, 8.0)  # (min, max) seconds
     vel_cmd: dict[str, VelRange] = field(default_factory=dict)  # {"vx": ..., "vy": ..., "wz": ...}
     torso_height_range: Optional[tuple[float, float]] = None  # (min, max) normalized; None = unconstrained
@@ -135,12 +138,27 @@ def load_config(path: str | Path) -> LocomotionConfig:
         hand_constraints_file = spec_raw.get("hand_constraints_file")
         if hand_constraints_file is not None and not isinstance(hand_constraints_file, str):
             raise ValueError(f"motion_types.{name}.hand_constraints_file must be a string path")
+        root2d_density = spec_raw.get("root2d_density")
+        if root2d_density is not None:
+            _valid_density = root2d_density == "dense" or root2d_density == "endpoint"
+            if not _valid_density:
+                m = re.fullmatch(r"stride_(\d+)", root2d_density)
+                _valid_density = bool(m) and int(m.group(1)) >= 1
+            if not _valid_density:
+                raise ValueError(
+                    f"motion_types.{name}.root2d_density must be 'dense', 'stride_N', or 'endpoint'"
+                )
+        root2d_heading_file = spec_raw.get("root2d_heading_file")
+        if root2d_heading_file is not None and not isinstance(root2d_heading_file, str):
+            raise ValueError(f"motion_types.{name}.root2d_heading_file must be a string path")
         spec = MotionSpec(
             name=name,
             description=spec_raw.get("description", ""),
             prompt_override=prompt_override.strip() if prompt_override is not None else None,
             arm_swing=arm_swing,
             hand_constraints_file=hand_constraints_file,
+            root2d_density=root2d_density,
+            root2d_heading_file=root2d_heading_file,
             duration_range=tuple(spec_raw["duration"]) if "duration" in spec_raw else (3.0, 8.0),
             vel_cmd=_parse_vel_cmd(spec_raw.get("vel_cmd", {})),
             torso_height_range=tuple(spec_raw["torso_height"]) if "torso_height" in spec_raw else None,

@@ -1,0 +1,102 @@
+# Y30: eight-direction normal walk, DATA-KIMODO-CONSTRAINT-003 recipe.
+#
+# Primary generation method (hand-constraint Y29 kept as experimental
+# secondary). Per-motion native Root2D density (dense) + simple natural text
+# prompts — the recipe that produced the human-accepted "restored arm swing"
+# batch in CONSTRAINT-003 (cells C1-C5, all 24 accepted).
+#
+# Single-factor comparison vs Y28: same 8 directions, same velocities, same
+# seed (20260805), same 6.0s/180f/30fps. Differences:
+#   Y28: Root2D off, verbose "with a normal walking gait" prompts
+#   Y30: Root2D ON (dense, stride 1), simple "A person walks <dir>." prompts
+best_practices_check: &bp
+  official_url: https://research.nvidia.com/labs/sil/projects/kimodo/docs/key_concepts/limitations.html
+  status: launch
+  causal_stage: yaml_root2d_enabled
+  experimental: false
+  prompt_begins_a_person: true
+  focused_behavior_count: 1
+  focused_behaviors_lte2: true
+  medium_detail: true
+  self_contained: true
+  duration_lte_10s: true
+  text_constraint_consistent: true
+  max_keyframes_per_constraint_type: 0
+  constraint_types_lt_20_keyframes: true
+  cfg: {type: separated, text_weight: 2.0, constraint_weight: 2.0, tuned: false}
+  g1_postprocessing_not_assumed: true
+global: &global
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 20260805
+  fps: 30
+  output_dir: /data/masteryip/kimodo/datasets/DATA-KIMODO-LOCOMOTION-YAML-004/eight_direction_root2d_6s_20260806_raw
+  sampling_method: uniform
+  export_preset: rltracker
+  experimental: false
+  root2d_constraint: {enabled: true, stride: 1}
+motion_types:
+  d00_forward:
+    description: "A person walks forward"
+    prompt: "A person walks forward."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [0.35, 0.35], vy: [0.0, 0.0], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+    root2d_density: dense
+  d01_forward_right:
+    description: "A person walks forward to the right"
+    prompt: "A person walks forward to the right."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [0.247487, 0.247487], vy: [0.247487, 0.247487], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+    root2d_density: dense
+  d02_right:
+    description: "A person walks to the right"
+    prompt: "A person walks to the right."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [0.0, 0.0], vy: [0.35, 0.35], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+    root2d_density: dense
+  d03_backward_right:
+    description: "A person walks backward to the right"
+    prompt: "A person walks backward to the right."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [-0.247487, -0.247487], vy: [0.247487, 0.247487], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+    root2d_density: dense
+  d04_backward:
+    description: "A person walks backward"
+    prompt: "A person walks backward."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [-0.35, -0.35], vy: [0.0, 0.0], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+    root2d_density: dense
+  d05_backward_left:
+    description: "A person walks backward to the left"
+    prompt: "A person walks backward to the left."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [-0.247487, -0.247487], vy: [-0.247487, -0.247487], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+    root2d_density: dense
+  d06_left:
+    description: "A person walks to the left"
+    prompt: "A person walks to the left."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [0.0, 0.0], vy: [-0.35, -0.35], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+    root2d_density: dense
+  d07_forward_left:
+    description: "A person walks forward to the left"
+    prompt: "A person walks forward to the left."
+    duration: [6.0, 6.0]
+    vel_cmd: {vx: [0.247487, 0.247487], vy: [-0.247487, -0.247487], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1
+    root2d_density: dense

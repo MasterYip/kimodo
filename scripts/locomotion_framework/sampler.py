@@ -23,6 +23,8 @@ class SampledMotion:
     torso_height: Optional[float] = None  # normalized; None = unconstrained
     style: str = ""
     hand_constraints_file: Optional[str] = None  # path to left-hand/right-hand constraint JSON
+    root2d_density: Optional[str] = None  # "dense" | "stride_N" | "endpoint" | None (inherit global)
+    root2d_heading_file: Optional[str] = None  # native npz/npy with global_root_heading (C5-style)
     diffusion_steps: int = 100
 
 
@@ -146,6 +148,8 @@ def _lhs_sample_from_spec(
             torso_height=torso_height,
             style=style,
             hand_constraints_file=spec.hand_constraints_file,
+            root2d_density=spec.root2d_density,
+            root2d_heading_file=spec.root2d_heading_file,
             diffusion_steps=spec.diffusion_steps,
         ))
 
@@ -191,6 +195,8 @@ class MotionSampler:
             torso_height=torso_height,
             style=style,
             hand_constraints_file=spec.hand_constraints_file,
+            root2d_density=spec.root2d_density,
+            root2d_heading_file=spec.root2d_heading_file,
             diffusion_steps=spec.diffusion_steps,
         )
 
@@ -262,6 +268,8 @@ class MotionSampler:
                     prompt_override=spec.prompt_override,
                     arm_swing=spec.arm_swing,
                     hand_constraints_file=spec.hand_constraints_file,
+                    root2d_density=spec.root2d_density,
+                    root2d_heading_file=spec.root2d_heading_file,
                     duration_range=spec.duration_range,
                     vel_cmd=dict(spec.vel_cmd),
                     torso_height_range=spec.torso_height_range,

@@ -1,0 +1,86 @@
+{
+  "model": "kimodo-g1-rp",
+  "duration_s": 6.0,
+  "fps": 30,
+  "diffusion_steps": 100,
+  "cfg": [
+    2.0,
+    2.0
+  ],
+  "seed_base": 20260805,
+  "note": "Per-direction references for Y29 hand-constraint derivation only.",
+  "directions": [
+    {
+      "direction": "d00_forward",
+      "index": 0,
+      "prompt": "A person walks forward with a normal walking gait.",
+      "seed": 20260805,
+      "frames": 180,
+      "root_2d_travel_m": 5.37069845199585,
+      "pelvis_height_median_m": 0.7571743726730347
+    },
+    {
+      "direction": "d01_forward_right",
+      "index": 1,
+      "prompt": "A person walks diagonally forward and right with a normal walking gait.",
+      "seed": 20260806,
+      "frames": 180,
+      "root_2d_travel_m": 4.511592388153076,
+      "pelvis_height_median_m": 0.7625662088394165
+    },
+    {
+      "direction": "d02_right",
+      "index": 2,
+      "prompt": "A person walks to the right with a normal walking gait.",
+      "seed": 20260807,
+      "frames": 180,
+      "root_2d_travel_m": 3.845235586166382,
+      "pelvis_height_median_m": 0.7691600322723389
+    },
+    {
+      "direction": "d03_backward_right",
+      "index": 3,
+      "prompt": "A person walks diagonally backward and right with a normal walking gait.",
+      "seed": 20260808,
+      "frames": 180,
+      "root_2d_travel_m": 4.07247257232666,
+      "pelvis_height_median_m": 0.7598177790641785
+    },
+    {
+      "direction": "d04_backward",
+      "index": 4,
+      "prompt": "A person walks backward with a normal walking gait.",
+      "seed": 20260809,
+      "frames": 180,
+      "root_2d_travel_m": 3.9395644664764404,
+      "pelvis_height_median_m": 0.7658340334892273
+    },
+    {
+      "direction": "d05_backward_left",
+      "index": 5,
+      "prompt": "A person walks diagonally backward and left with a normal walking gait.",
+      "seed": 20260810,
+      "frames": 180,
+      "root_2d_travel_m": 4.26370096206665,
+      "pelvis_height_median_m": 0.7565285563468933
+    },
+    {
+      "direction": "d06_left",
+      "index": 6,
+      "prompt": "A person walks to the left with a normal walking gait.",
+      "seed": 20260811,
+      "frames": 180,
+      "root_2d_travel_m": 3.6053292751312256,
+      "pelvis_height_median_m": 0.7579736709594727
+    },
+    {
+      "direction": "d07_forward_left",
+      "index": 7,
+      "prompt": "A person walks diagonally forward and left with a normal walking gait.",
+      "seed": 20260812,
+      "frames": 180,
+      "root_2d_travel_m": 4.586163520812988,
+      "pelvis_height_median_m": 0.7629764080047607
+    }
+  ]
+}

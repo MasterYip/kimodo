@@ -1,0 +1,22 @@
+official_url: https://research.nvidia.com/labs/sil/projects/kimodo/docs/key_concepts/limitations.html
+experiment: sports_crossover_native_textonly_20260806
+prompts:
+  - &minimal_right
+    {status: launch, family: crossover_minimal_right, direction: right, seed: 20260805,
+     prompt: "A person moves to the right using athletic crossover steps.",
+     best_practices_check: &one {prompt_begins_a_person: true, focused_behavior_count: 1, focused_behaviors_lte2: true, medium_detail: true, self_contained: true, duration_lte_10s: true, text_constraint_consistent: true, constraint_types_lt_20_keyframes: true, g1_postprocessing_not_assumed: true}}
+  - {status: launch, family: crossover_minimal_left, direction: left, seed: 20260805,
+     prompt: "A person moves to the left using athletic crossover steps.", best_practices_check: *one}
+  - {status: launch, family: crossover_front_right, direction: right, seed: 20260805,
+     prompt: "A person moves to the right with athletic front-crossover steps while facing forward, with natural arm swing away from the hips.",
+     best_practices_check: &two {prompt_begins_a_person: true, focused_behavior_count: 2, focused_behaviors_lte2: true, medium_detail: true, self_contained: true, duration_lte_10s: true, text_constraint_consistent: true, constraint_types_lt_20_keyframes: true, g1_postprocessing_not_assumed: true}}
+  - {status: launch, family: crossover_front_left, direction: left, seed: 20260805,
+     prompt: "A person moves to the left with athletic front-crossover steps while facing forward, with natural arm swing away from the hips.", best_practices_check: *two}
+  - {status: launch, family: carioca_behind_right, direction: right, seed: 20260805,
+     prompt: "A person moves to the right with behind-cross carioca steps while facing forward, with natural arm swing away from the hips.", best_practices_check: *two}
+  - {status: launch, family: carioca_behind_left, direction: left, seed: 20260805,
+     prompt: "A person moves to the left with behind-cross carioca steps while facing forward, with natural arm swing away from the hips.", best_practices_check: *two}
+  - {status: launch, family: defensive_shuffle_right, direction: right, seed: 20260805,
+     prompt: "A person performs a defensive shuffle to the right without crossing the feet, with natural arm swing away from the hips.", best_practices_check: *two}
+  - {status: launch, family: defensive_shuffle_left, direction: left, seed: 20260805,
+     prompt: "A person performs a defensive shuffle to the left without crossing the feet, with natural arm swing away from the hips.", best_practices_check: *two}

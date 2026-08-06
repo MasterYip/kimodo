@@ -1,0 +1,17 @@
+global:
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 20260805
+  fps: 30
+  output_dir: /data/masteryip/kimodo/datasets/DATA-KIMODO-LOCOMOTION-YAML-004/sports_crossover_20260806_raw/y21l_defensive_shuffle_left_disabled_s20260805
+  sampling_method: uniform
+  export_preset: rltracker
+  root2d_constraint: {enabled: false, stride: 1}
+motion_types:
+  left:
+    description: "An athlete performs a lateral defensive shuffle to the left"
+    prompt: "An athlete performs a lateral defensive shuffle to the left while facing forward without crossing the feet, using natural counterbalancing arm swing with both hands outside the pelvis and hips and away from the body centerline and crotch."
+    duration: [8.0, 8.0]
+    vel_cmd: {vx: [0.0, 0.0], vy: [-0.35, -0.35], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1

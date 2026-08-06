@@ -22,6 +22,7 @@ class SampledMotion:
     vel: dict[str, float]     # {"vx": 0.5, "vy": 0.0, "wz": 0.1}
     torso_height: Optional[float] = None  # normalized; None = unconstrained
     style: str = ""
+    hand_constraints_file: Optional[str] = None  # path to left-hand/right-hand constraint JSON
     diffusion_steps: int = 100
 
 
@@ -144,6 +145,7 @@ def _lhs_sample_from_spec(
             vel=vel,
             torso_height=torso_height,
             style=style,
+            hand_constraints_file=spec.hand_constraints_file,
             diffusion_steps=spec.diffusion_steps,
         ))
 
@@ -188,6 +190,7 @@ class MotionSampler:
             vel=vel,
             torso_height=torso_height,
             style=style,
+            hand_constraints_file=spec.hand_constraints_file,
             diffusion_steps=spec.diffusion_steps,
         )
 
@@ -258,6 +261,7 @@ class MotionSampler:
                     description=spec.description,
                     prompt_override=spec.prompt_override,
                     arm_swing=spec.arm_swing,
+                    hand_constraints_file=spec.hand_constraints_file,
                     duration_range=spec.duration_range,
                     vel_cmd=dict(spec.vel_cmd),
                     torso_height_range=spec.torso_height_range,

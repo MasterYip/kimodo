@@ -1,0 +1,17 @@
+global:
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 20260805
+  fps: 30
+  output_dir: /data/masteryip/kimodo/datasets/DATA-KIMODO-LOCOMOTION-YAML-004/sports_crossover_20260806_raw/y19r_crossover_front_right_disabled_s20260805
+  sampling_method: uniform
+  export_preset: rltracker
+  root2d_constraint: {enabled: false, stride: 1}
+motion_types:
+  right:
+    description: "An athlete performs sports crossover steps to the right"
+    prompt: "An athlete performs athletic crossover steps to the right, with the trailing left leg crossing in front of the right support leg while the torso stays mostly facing forward, using natural counterbalancing arm swing with both hands outside the pelvis and hips and away from the body centerline and crotch."
+    duration: [8.0, 8.0]
+    vel_cmd: {vx: [0.0, 0.0], vy: [0.35, 0.35], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1

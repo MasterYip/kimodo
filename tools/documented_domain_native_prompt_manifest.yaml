@@ -1,0 +1,21 @@
+official_url: https://research.nvidia.com/labs/sil/projects/kimodo/docs/key_concepts/limitations.html
+experiment: documented_domain_native_textonly_20260806
+prompts:
+  - {status: launch, family: stealth_crouch_forward, direction: forward, seed: 20260805,
+     prompt: "A person walks forward stealthily in a low crouch.", best_practices_check: &bp {prompt_begins_a_person: true, focused_behavior_count: 2, focused_behaviors_lte2: true, medium_detail: true, self_contained: true, duration_lte_10s: true, text_constraint_consistent: true, constraint_types_lt_20_keyframes: true, g1_postprocessing_not_assumed: true}}
+  - {status: launch, family: stealth_crouch_right, direction: right, seed: 20260805,
+     prompt: "A person moves sideways to the right stealthily in a low crouch.", best_practices_check: *bp}
+  - {status: launch, family: stealth_crouch_left, direction: left, seed: 20260805,
+     prompt: "A person moves sideways to the left stealthily in a low crouch.", best_practices_check: *bp}
+  - {status: launch, family: combat_forward, direction: forward, seed: 20260805,
+     prompt: "A person advances forward in a low videogame combat stance.", best_practices_check: *bp}
+  - {status: launch, family: combat_strafe_right, direction: right, seed: 20260805,
+     prompt: "A person strafes to the right in a low videogame combat stance.", best_practices_check: *bp}
+  - {status: launch, family: combat_strafe_left, direction: left, seed: 20260805,
+     prompt: "A person strafes to the left in a low videogame combat stance.", best_practices_check: *bp}
+  - {status: skip, family: stealth_minimal, direction: unspecified, seed: 20260805,
+     prompt: "A person moves stealthily.", reason: "too vague; not medium detail",
+     best_practices_check: {prompt_begins_a_person: true, focused_behavior_count: 1, focused_behaviors_lte2: true, medium_detail: false, self_contained: true, duration_lte_10s: true, text_constraint_consistent: true, constraint_types_lt_20_keyframes: true, g1_postprocessing_not_assumed: true}}
+  - {status: skip, family: combat_minimal, direction: unspecified, seed: 20260805,
+     prompt: "A person performs videogame combat movement.", reason: "too vague; not medium detail",
+     best_practices_check: {prompt_begins_a_person: true, focused_behavior_count: 1, focused_behaviors_lte2: true, medium_detail: false, self_contained: true, duration_lte_10s: true, text_constraint_consistent: true, constraint_types_lt_20_keyframes: true, g1_postprocessing_not_assumed: true}}

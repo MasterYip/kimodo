@@ -1,0 +1,32 @@
+best_practices_check:
+  official_url: https://research.nvidia.com/labs/sil/projects/kimodo/docs/key_concepts/limitations.html
+  status: launch
+  causal_stage: yaml_root2d_disabled
+  prompt_begins_a_person: true
+  focused_behavior_count: 2
+  focused_behaviors_lte2: true
+  medium_detail: true
+  self_contained: true
+  duration_lte_10s: true
+  text_constraint_consistent: true
+  max_keyframes_per_constraint_type: 0
+  constraint_types_lt_20_keyframes: true
+  cfg: {type: separated, text_weight: 2.0, constraint_weight: 2.0, tuned: false}
+  g1_postprocessing_not_assumed: true
+global:
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 20260805
+  fps: 30
+  output_dir: /data/masteryip/kimodo/datasets/DATA-KIMODO-LOCOMOTION-YAML-004/sports_crossover_bp_20260806_raw/y24l_carioca_behind_left_bp_s20260805
+  sampling_method: uniform
+  export_preset: rltracker
+  root2d_constraint: {enabled: false, stride: 1}
+motion_types:
+  left:
+    description: "A person performs behind-cross carioca steps to the left"
+    prompt: "A person moves to the left with behind-cross carioca steps while facing forward, with natural arm swing away from the hips."
+    duration: [8.0, 8.0]
+    vel_cmd: {vx: [0.0, 0.0], vy: [-0.35, -0.35], wz: [0.0, 0.0]}
+    styles: []
+    num_samples: 1

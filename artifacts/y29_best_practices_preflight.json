@@ -1,0 +1,25 @@
+[
+  {
+    "best_practices_pass": true,
+    "cfg": {
+      "constraint_weight": 2.0,
+      "text_weight": 2.0,
+      "tuned": false,
+      "type": "separated"
+    },
+    "config": "y29_eight_direction_hand_constraint_bp_s20260805.yaml",
+    "failures": [],
+    "official_url": "https://research.nvidia.com/labs/sil/projects/kimodo/docs/key_concepts/limitations.html",
+    "prompt": [
+      "A person walks forward with a normal walking gait.",
+      "A person walks diagonally forward and right with a normal walking gait.",
+      "A person walks to the right with a normal walking gait.",
+      "A person walks diagonally backward and right with a normal walking gait.",
+      "A person walks backward with a normal walking gait.",
+      "A person walks diagonally backward and left with a normal walking gait.",
+      "A person walks to the left with a normal walking gait.",
+      "A person walks diagonally forward and left with a normal walking gait."
+    ],
+    "status": "launch"
+  }
+]

@@ -120,11 +120,31 @@ then staged selectively:
   YAML (round-trip data loss); added polar output to `config_to_yaml_str`
   (commit `6513863`).
 
+## Archive tags (source branches folded in)
+
+Annotated archive tags were created on the source-branch tips and pushed to
+`fork` (2026-08-07). They record the reason so nobody mistakes these branches
+for active work. Branches are NOT deleted.
+
+| Tag | Target | Reason summary |
+|---|---|---|
+| `archive/agent-20260806-data-kimodo-polar-distribution-006@20260807` | `1d00b0d` | polar/wrist-PCA/prompt-controls/YAML-sweep-framework/MotionSpec-defaults folded in; `g1_polar_direction_speed_24.yaml` + Y-series/probes excluded |
+| `archive/agent-data-kimodo-distributed-007@20260807` | `97ad86c` | root-FS temp/cache + gate_check already in base `8f59b6f`; DISTRIBUTED-007 constraints/assets excluded |
+| `archive/agent-data-kimodo-locomotion-yaml-004@20260807` | `00d8eed` | stand_turn / YAML-sweep-framework / prompt-controls / wrist-PCA folded in; y0-y18 + tactical probes excluded |
+| `archive/agent-data-kimodo-textonly-002@20260807` | `a314017` | MotionSpec defaults folded in |
+| `archive/agent-data-kimodo-constraint-003@20260807` | `a314017` | MotionSpec defaults folded in |
+| `archive/agent-data-kimodo-001-constraint-ablation@20260807` | `1409a8b` | quality gate / export index+name / native timing / NF4 / metrics folded in; `*_seed*.yaml` excluded |
+| `archive/agent-data-kimodo-001-quality-gen@20260807` | `1409a8b` | same as the 001-constraint-ablation tag |
+| `archive/agent-data-kimodo-framework-port-008@20260807` | `8f59b6f` | BASE of the consolidation |
+
+Not tagged archived: `agent/DATA-KIMODO-VELOCITY-DISTRIBUTION-009` (active,
+running agent, untouched); `feat/mogen_distributed` (local branch at `2bfba72`,
+an ancestor already in the base — its polar work lives on the fork POLAR-006
+branch, which is tagged).
+
 ## Notes / coordination
 
 - `agent/DATA-KIMODO-VELOCITY-DISTRIBUTION-009` was NOT touched. PM will merge
   it on top of this branch; its `config.py`/`sampler.py`/`orchestrator.py`
   win in any overlap. This branch intentionally kept the PORT-008 natural
   recipe + polar features reconciled so the merge is clean.
-- Archive tags created for folded source branches — see
-  `git tag -n1 'archive/*'`.

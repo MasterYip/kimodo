@@ -1,0 +1,275 @@
+# =============================================================================
+# DATA-KIMODO-NATURAL-LOCO-014 — CANARY gate config.
+# 16 motions, focused on the NEW risks (wz turning + 360° direction bands):
+#   forward (d00), left (d06), backward (d04) corners of the 3-D box:
+#     {fast ~1.45, low torso ~0.455, wz = -1.0}      {fast, low, wz = +1.0}
+#     {fast, neutral ~0.775, wz = -1.0}              {fast, neutral, wz = +1.0}
+#     {slow ~0.11, low, wz ~0}
+#   + one band-edge direction sample at the ±22.5° boundary (d00).
+# Same prompt_speed_bands + torso-hint composition as the full config;
+# direction bands = the new 45° bands (d00 [-22.5,22.5], d06 [67.5,112.5],
+# d04 [157.5,202.5]).
+# Canary verifies from qpos: (a) initial traveled direction matches prompt,
+# (b) TURNING ACTUALLY OCCURS — heading (root-quaternion yaw) drifts over the
+# clip consistent with commanded wz (sign + magnitude), (c) ACHIEVED root/pelvis
+# height still spreads across [0.45,0.8] (TORSO-013 regression), (d) naturalness
+# (HHOP low, head_z > 0.2 m, checked on the local FK).
+global:
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 20260809
+  fps: 30
+  output_dir: /data/masteryip/kimodo/datasets/DATA-KIMODO-NATURAL-LOCO-014/canary_raw
+  sampling_method: uniform
+  rerank: ''
+  export_preset: rltracker
+  cfg_type: separated
+  cfg_weight:
+  - 2.0
+  - 2.0
+motion_types:
+  # ── d00 forward corners ────────────────────────────────────────────
+  d00_forward_fast_low_wzneg:
+    description: A person walks forward.
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar: {speed: [1.4, 1.5], direction_deg: [-22.5, 22.5]}
+      wz: [-1.0, -1.0]
+    torso_height: [0.45, 0.46]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly forward."]
+      - [0.85, "A person walks forward."]
+      - [1.20, "A person walks briskly forward."]
+      - [1.51, "A person jogs forward."]
+    num_samples: 1
+  d00_forward_fast_low_wzpos:
+    description: A person walks forward.
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar: {speed: [1.4, 1.5], direction_deg: [-22.5, 22.5]}
+      wz: [1.0, 1.0]
+    torso_height: [0.45, 0.46]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly forward."]
+      - [0.85, "A person walks forward."]
+      - [1.20, "A person walks briskly forward."]
+      - [1.51, "A person jogs forward."]
+    num_samples: 1
+  d00_forward_fast_neu_wzneg:
+    description: A person walks forward.
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar: {speed: [1.4, 1.5], direction_deg: [-22.5, 22.5]}
+      wz: [-1.0, -1.0]
+    torso_height: [0.77, 0.78]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly forward."]
+      - [0.85, "A person walks forward."]
+      - [1.20, "A person walks briskly forward."]
+      - [1.51, "A person jogs forward."]
+    num_samples: 1
+  d00_forward_fast_neu_wzpos:
+    description: A person walks forward.
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar: {speed: [1.4, 1.5], direction_deg: [-22.5, 22.5]}
+      wz: [1.0, 1.0]
+    torso_height: [0.77, 0.78]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly forward."]
+      - [0.85, "A person walks forward."]
+      - [1.20, "A person walks briskly forward."]
+      - [1.51, "A person jogs forward."]
+    num_samples: 1
+  d00_forward_slow_low_wz0:
+    description: A person walks forward.
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar: {speed: [0.1, 0.13], direction_deg: [-22.5, 22.5]}
+      wz: [0.0, 0.0]
+    torso_height: [0.45, 0.46]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly forward."]
+      - [0.85, "A person walks forward."]
+      - [1.20, "A person walks briskly forward."]
+      - [1.51, "A person jogs forward."]
+    num_samples: 1
+  d00_forward_edge_n22_5_neu_wz0:
+    description: A person walks forward.
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar: {speed: [1.2, 1.3], direction_deg: [-22.5, -22.5]}
+      wz: [0.0, 0.0]
+    torso_height: [0.60, 0.61]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly forward."]
+      - [0.85, "A person walks forward."]
+      - [1.20, "A person walks briskly forward."]
+      - [1.51, "A person jogs forward."]
+    num_samples: 1
+
+  # ── d06 left corners ───────────────────────────────────────────────
+  d06_left_fast_low_wzneg:
+    description: A person walks to the left.
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar: {speed: [1.4, 1.5], direction_deg: [67.5, 112.5]}
+      wz: [-1.0, -1.0]
+    torso_height: [0.45, 0.46]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly to the left."]
+      - [0.85, "A person walks to the left."]
+      - [1.20, "A person walks briskly to the left."]
+      - [1.51, "A person jogs to the left."]
+    num_samples: 1
+  d06_left_fast_low_wzpos:
+    description: A person walks to the left.
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar: {speed: [1.4, 1.5], direction_deg: [67.5, 112.5]}
+      wz: [1.0, 1.0]
+    torso_height: [0.45, 0.46]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly to the left."]
+      - [0.85, "A person walks to the left."]
+      - [1.20, "A person walks briskly to the left."]
+      - [1.51, "A person jogs to the left."]
+    num_samples: 1
+  d06_left_fast_neu_wzneg:
+    description: A person walks to the left.
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar: {speed: [1.4, 1.5], direction_deg: [67.5, 112.5]}
+      wz: [-1.0, -1.0]
+    torso_height: [0.77, 0.78]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly to the left."]
+      - [0.85, "A person walks to the left."]
+      - [1.20, "A person walks briskly to the left."]
+      - [1.51, "A person jogs to the left."]
+    num_samples: 1
+  d06_left_fast_neu_wzpos:
+    description: A person walks to the left.
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar: {speed: [1.4, 1.5], direction_deg: [67.5, 112.5]}
+      wz: [1.0, 1.0]
+    torso_height: [0.77, 0.78]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly to the left."]
+      - [0.85, "A person walks to the left."]
+      - [1.20, "A person walks briskly to the left."]
+      - [1.51, "A person jogs to the left."]
+    num_samples: 1
+  d06_left_slow_low_wz0:
+    description: A person walks to the left.
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar: {speed: [0.1, 0.13], direction_deg: [67.5, 112.5]}
+      wz: [0.0, 0.0]
+    torso_height: [0.45, 0.46]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly to the left."]
+      - [0.85, "A person walks to the left."]
+      - [1.20, "A person walks briskly to the left."]
+      - [1.51, "A person jogs to the left."]
+    num_samples: 1
+
+  # ── d04 backward corners ───────────────────────────────────────────
+  d04_backward_fast_low_wzneg:
+    description: A person walks backward.
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar: {speed: [1.4, 1.5], direction_deg: [157.5, 202.5]}
+      wz: [-1.0, -1.0]
+    torso_height: [0.45, 0.46]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly backward."]
+      - [0.85, "A person walks backward."]
+      - [1.20, "A person walks briskly backward."]
+      - [1.51, "A person jogs backward."]
+    num_samples: 1
+  d04_backward_fast_low_wzpos:
+    description: A person walks backward.
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar: {speed: [1.4, 1.5], direction_deg: [157.5, 202.5]}
+      wz: [1.0, 1.0]
+    torso_height: [0.45, 0.46]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly backward."]
+      - [0.85, "A person walks backward."]
+      - [1.20, "A person walks briskly backward."]
+      - [1.51, "A person jogs backward."]
+    num_samples: 1
+  d04_backward_fast_neu_wzneg:
+    description: A person walks backward.
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar: {speed: [1.4, 1.5], direction_deg: [157.5, 202.5]}
+      wz: [-1.0, -1.0]
+    torso_height: [0.77, 0.78]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly backward."]
+      - [0.85, "A person walks backward."]
+      - [1.20, "A person walks briskly backward."]
+      - [1.51, "A person jogs backward."]
+    num_samples: 1
+  d04_backward_fast_neu_wzpos:
+    description: A person walks backward.
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar: {speed: [1.4, 1.5], direction_deg: [157.5, 202.5]}
+      wz: [1.0, 1.0]
+    torso_height: [0.77, 0.78]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly backward."]
+      - [0.85, "A person walks backward."]
+      - [1.20, "A person walks briskly backward."]
+      - [1.51, "A person jogs backward."]
+    num_samples: 1
+  d04_backward_slow_low_wz0:
+    description: A person walks backward.
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar: {speed: [0.1, 0.13], direction_deg: [157.5, 202.5]}
+      wz: [0.0, 0.0]
+    torso_height: [0.45, 0.46]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly backward."]
+      - [0.85, "A person walks backward."]
+      - [1.20, "A person walks briskly backward."]
+      - [1.51, "A person jogs backward."]
+    num_samples: 1

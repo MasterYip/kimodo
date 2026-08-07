@@ -1,0 +1,232 @@
+# =============================================================================
+# DATA-KIMODO-NATURAL-LOCO-014 — one grouped config, 3-D distribution:
+# planar velocity [0.0, 1.5] m/s x turning rate wz [-1.0, 1.0] rad/s x
+# torso_height [0.45, 0.8] (normalized relative to G1's default standing
+# height, neutral 0.77), all 8 directions, 200 motions, natural (frozen
+# PORT-008/TORSO-013 recipe).
+#
+# User directive (2026-08-07): "g1_natural_loco.yaml is the copy of the
+# torso_velocity, but I found direction_deg do not cover 360 deg, please ensure
+# all direction will be sampled, And please ensure wz is sampled too
+# [-1.0, 1.0], Totally 200 motions."
+#   -> the TORSO-013 torso_velocity distribution is KEPT (speed [0,1.5], all 8
+#      native-compass directions, torso_height [0.45,0.8]) and THREE things are
+#      changed:
+#        (1) direction bands are WIDENED to 45 deg each so they EXACTLY tile
+#            360 deg (native compass, zero gaps) — every direction sampled;
+#        (2) a THIRD distributed dimension is added: wz (turning) in
+#            [-1.0, 1.0] rad/s;
+#        (3) num_samples 25 per group -> 200 motions total.
+#
+# DESIGN (see the task design note for the full rationale):
+#   * 8 direction groups, each a `vel_cmd.polar` group with
+#       speed: [0.0, 1.5]            <- FULL planar speed spectrum (stand ->
+#                                        walk -> brisk -> jog).
+#       direction_deg: <45 deg band> <- native compass, 0 deg = +forward,
+#                                        +90 deg = +left, -90 deg = +right.
+#                                        The 8 bands tile 360 deg with ZERO
+#                                        gaps: d00[-22.5,22.5] d07[22.5,67.5]
+#                                        d01[-67.5,-22.5] d02[-112.5,-67.5]
+#                                        d03[-157.5,-112.5] d04[157.5,202.5]
+#                                        d05[112.5,157.5] d06[67.5,112.5].
+#   * wz: [-1.0, 1.0]               <- NEW distributed dimension (turning,
+#                                        rad/s, +left).  Reaches the model
+#                                        through the Root2D curved-path
+#                                        constraint (constraints.py curved
+#                                        branch: body heading rotates at rate
+#                                        wz).  LHS stratifies it into 25 cells.
+#   * torso_height: [0.45, 0.8]     <- kept from TORSO-013.  Reaches the model
+#                                        ONLY through the text prompt (Root2D is
+#                                        strictly 2-D).  The prompt carries the
+#                                        posture via the torso-height hint.
+#   * num_samples: 25 per group (3-D LHS over speed x direction x wz x torso)
+#       = 200 motions.  Latin Hypercube Sampling stratifies EVERY continuous
+#       dimension into 25 cells -> one sample per stratum of speed, direction,
+#       wz AND torso in every direction.
+#   * Per-speed-band exact prompts (`prompt_speed_bands`) + torso-hint
+#       composition (same as TORSO-013): the prompt is chosen from the sampled
+#       planar speed, then the `_torso_height_hint` descriptor is appended when
+#       the sampled torso is off-neutral.  NOTE: at high |wz| the motion is a
+#       TURNING motion but the prompt describes the INITIAL heading only
+#       (accepted for this batch; the canary verifies high-|wz| samples stay
+#       natural).
+#   * Natural recipe (frozen from FRAMEWORK-PORT-008 / TORSO-013):
+#       duration [8.0, 8.0], styles [], separated CFG [2.0, 2.0], fixed seed,
+#       model kimodo-g1-rp, fps 30, diffusion_steps 100, export_preset
+#       rltracker, rerank speed.
+#
+# Usage (in the kimodo worktree with the merged framework):
+#   source scripts/env.sh   # ROOT-FS-SAFE: all temp/cache/log on /data
+#   PYTHONPATH=. python3 scripts/locomotion_framework/generate_natural_loco.py \
+#       --config scripts/locomotion_framework/configs/g1_natural_loco.yaml \
+#       --output /data/masteryip/kimodo/datasets/DATA-KIMODO-NATURAL-LOCO-014/batch_raw \
+#       --gpu 0
+# =============================================================================
+
+global:
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 20260809
+  fps: 30
+  output_dir: /data/masteryip/kimodo/datasets/DATA-KIMODO-NATURAL-LOCO-014/batch_raw
+  sampling_method: lhs        # 3-D Latin Hypercube Sampling: uniform coverage of
+                              #   the speed, direction, wz AND torso_height
+                              #   spaces within every direction group
+  rerank: speed               # regularise output (ascending speed within group;
+                              #   keeps the LHS wz/torso pairing attached)
+  export_preset: rltracker
+  cfg_type: separated
+  cfg_weight: [2.0, 2.0]
+
+motion_types:
+  # ── d00 forward ─────────────────────────────────────────────────────
+  d00_forward:
+    description: "A person walks forward."
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar:
+        speed: [0.0, 1.5]
+        direction_deg: [-22.5, 22.5]
+      wz: [-1.0, 1.0]
+    torso_height: [0.45, 0.8]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly forward."]
+      - [0.85, "A person walks forward."]
+      - [1.20, "A person walks briskly forward."]
+      - [1.51, "A person jogs forward."]
+    num_samples: 25
+
+  # ── d01 forward-right ───────────────────────────────────────────────
+  d01_forward_right:
+    description: "A person walks forward to the right."
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar:
+        speed: [0.0, 1.5]
+        direction_deg: [-67.5, -22.5]
+      wz: [-1.0, 1.0]
+    torso_height: [0.45, 0.8]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly forward to the right."]
+      - [0.85, "A person walks forward to the right."]
+      - [1.20, "A person walks briskly forward to the right."]
+      - [1.51, "A person jogs forward to the right."]
+    num_samples: 25
+
+  # ── d02 right ───────────────────────────────────────────────────────
+  d02_right:
+    description: "A person walks to the right."
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar:
+        speed: [0.0, 1.5]
+        direction_deg: [-112.5, -67.5]
+      wz: [-1.0, 1.0]
+    torso_height: [0.45, 0.8]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly to the right."]
+      - [0.85, "A person walks to the right."]
+      - [1.20, "A person walks briskly to the right."]
+      - [1.51, "A person jogs to the right."]
+    num_samples: 25
+
+  # ── d03 backward-right ──────────────────────────────────────────────
+  d03_backward_right:
+    description: "A person walks backward to the right."
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar:
+        speed: [0.0, 1.5]
+        direction_deg: [-157.5, -112.5]
+      wz: [-1.0, 1.0]
+    torso_height: [0.45, 0.8]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly backward to the right."]
+      - [0.85, "A person walks backward to the right."]
+      - [1.20, "A person walks briskly backward to the right."]
+      - [1.51, "A person jogs backward to the right."]
+    num_samples: 25
+
+  # ── d04 backward ────────────────────────────────────────────────────
+  d04_backward:
+    description: "A person walks backward."
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar:
+        speed: [0.0, 1.5]
+        direction_deg: [157.5, 202.5]
+      wz: [-1.0, 1.0]
+    torso_height: [0.45, 0.8]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly backward."]
+      - [0.85, "A person walks backward."]
+      - [1.20, "A person walks briskly backward."]
+      - [1.51, "A person jogs backward."]
+    num_samples: 25
+
+  # ── d05 backward-left ───────────────────────────────────────────────
+  d05_backward_left:
+    description: "A person walks backward to the left."
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar:
+        speed: [0.0, 1.5]
+        direction_deg: [112.5, 157.5]
+      wz: [-1.0, 1.0]
+    torso_height: [0.45, 0.8]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly backward to the left."]
+      - [0.85, "A person walks backward to the left."]
+      - [1.20, "A person walks briskly backward to the left."]
+      - [1.51, "A person jogs backward to the left."]
+    num_samples: 25
+
+  # ── d06 left ────────────────────────────────────────────────────────
+  d06_left:
+    description: "A person walks to the left."
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar:
+        speed: [0.0, 1.5]
+        direction_deg: [67.5, 112.5]
+      wz: [-1.0, 1.0]
+    torso_height: [0.45, 0.8]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly to the left."]
+      - [0.85, "A person walks to the left."]
+      - [1.20, "A person walks briskly to the left."]
+      - [1.51, "A person jogs to the left."]
+    num_samples: 25
+
+  # ── d07 forward-left ────────────────────────────────────────────────
+  d07_forward_left:
+    description: "A person walks forward to the left."
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar:
+        speed: [0.0, 1.5]
+        direction_deg: [22.5, 67.5]
+      wz: [-1.0, 1.0]
+    torso_height: [0.45, 0.8]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly forward to the left."]
+      - [0.85, "A person walks forward to the left."]
+      - [1.20, "A person walks briskly forward to the left."]
+      - [1.51, "A person jogs forward to the left."]
+    num_samples: 25

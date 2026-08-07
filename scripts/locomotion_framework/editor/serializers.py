@@ -87,6 +87,13 @@ def config_to_yaml_str(config: LocomotionConfig, motion_types_only: bool = True)
         buf.write(f"    duration: [{spec.duration_range[0]}, {spec.duration_range[1]}]\n")
         if spec.vel_cmd:
             buf.write("    vel_cmd:\n")
+            if spec.polar_vel_cmd is not None:
+                pv = spec.polar_vel_cmd
+                buf.write("      polar:\n")
+                buf.write(f"        speed: [{pv.speed.min}, {pv.speed.max}]\n")
+                buf.write(
+                    f"        direction_deg: [{pv.direction_deg.min}, {pv.direction_deg.max}]\n"
+                )
             for key in ("vx", "vy", "wz"):
                 if key in spec.vel_cmd:
                     vr = spec.vel_cmd[key]

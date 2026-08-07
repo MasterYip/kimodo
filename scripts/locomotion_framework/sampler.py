@@ -21,9 +21,9 @@ class SampledMotion:
     prompt: str               # final text prompt
     duration: float           # seconds
     vel: dict[str, float]     # {"vx": 0.5, "vy": 0.0, "wz": 0.1}
-    torso_height: float       # normalized
-    style: str
-    diffusion_steps: int
+    torso_height: Optional[float] = None  # normalized; None = unconstrained
+    style: str = ""
+    diffusion_steps: int = 100
     # ── Distributed-Root2D extensions (DATA-KIMODO-FRAMEWORK-PORT-008) ──
     heading_deg: Optional[float] = None
     stride: Optional[int] = None
@@ -34,7 +34,7 @@ class SampledMotion:
     speed_hint: bool = True
 
 
-def _prompt_for_spec(spec: MotionSpec, style: str, torso_height: float,
+def _prompt_for_spec(spec: MotionSpec, style: str, torso_height: Optional[float],
                      vel: dict[str, float]) -> str:
     """Build the final prompt for a spec.
 
@@ -48,9 +48,11 @@ def _prompt_for_spec(spec: MotionSpec, style: str, torso_height: float,
     return build_motion_prompt(
         spec.description,
         style,
-        torso_height=torso_height if spec.name != "stand" else None,
+        torso_height=torso_height if (torso_height is not None and spec.name != "stand") else None,
         vel=vel,
         speed_hint=spec.speed_hint,
+        exact_prompt=spec.prompt_override,
+        arm_swing=spec.arm_swing,
     )
 
 
@@ -65,6 +67,15 @@ def _extra_kwargs(spec: MotionSpec) -> dict:
         output_name=spec.output_name,
         speed_hint=spec.speed_hint,
     )
+
+
+def polar_to_cartesian(speed: float, direction_deg: float) -> dict[str, float]:
+    """Convert polar speed/direction to the framework vx/vy convention."""
+    theta = np.deg2rad(direction_deg)
+    return {
+        "vx": float(speed * np.cos(theta)),
+        "vy": float(speed * np.sin(theta)),
+    }
 
 
 def _sort_key_for(sample: SampledMotion, by: str) -> float:
@@ -88,6 +99,10 @@ def _sort_key_for(sample: SampledMotion, by: str) -> float:
         vx = sample.vel.get("vx", 0.0)
         vy = sample.vel.get("vy", 0.0)
         return (vx ** 2 + vy ** 2) ** 0.5
+    elif by in {"direction", "direction_deg"}:
+        vx = sample.vel.get("vx", 0.0)
+        vy = sample.vel.get("vy", 0.0)
+        return float(np.degrees(np.arctan2(vy, vx)))
     elif by == "torso":
         return sample.torso_height
     elif by == "duration":
@@ -133,14 +148,23 @@ def lhs_sample(rng: np.random.RandomState, ranges: list[tuple[float, float]], n:
 def _spec_param_ranges(spec: MotionSpec) -> list[tuple[float, float]]:
     """Return ordered continuous-parameter ranges for a MotionSpec.
 
-    Order: duration, vx, vy, wz, torso_height.
-    Dimensions present are determined by ``vel_cmd`` keys.
+    Order: duration, planar velocity, wz, torso_height. Planar velocity is
+    either Cartesian vx/vy or polar speed/direction_deg.
     """
     ranges = [spec.duration_range]
-    for key in ("vx", "vy", "wz"):
+    if spec.polar_vel_cmd is not None:
+        ranges.append((spec.polar_vel_cmd.speed.min, spec.polar_vel_cmd.speed.max))
+        ranges.append((
+            spec.polar_vel_cmd.direction_deg.min,
+            spec.polar_vel_cmd.direction_deg.max,
+        ))
+    for key in ("vx", "vy") if spec.polar_vel_cmd is None else ():
         if key in spec.vel_cmd:
             ranges.append((spec.vel_cmd[key].min, spec.vel_cmd[key].max))
-    ranges.append(spec.torso_height_range)
+    if "wz" in spec.vel_cmd:
+        ranges.append((spec.vel_cmd["wz"].min, spec.vel_cmd["wz"].max))
+    if spec.torso_height_range is not None:
+        ranges.append(spec.torso_height_range)
     return ranges
 
 
@@ -152,18 +176,26 @@ def _lhs_sample_from_spec(
     ranges = _spec_param_ranges(spec)
     lhs_values = lhs_sample(rng, ranges, n)
 
-    vel_keys_present = [k for k in ("vx", "vy", "wz") if k in spec.vel_cmd]
-
     samples = []
     for row in range(n):
         vals = iter(lhs_values[row])
         duration = float(next(vals))
 
         vel = {}
-        for k in vel_keys_present:
-            vel[k] = float(next(vals))
+        if spec.polar_vel_cmd is not None:
+            speed = float(next(vals))
+            direction_deg = float(next(vals))
+            vel.update(polar_to_cartesian(speed, direction_deg))
+        else:
+            for key in ("vx", "vy"):
+                if key in spec.vel_cmd:
+                    vel[key] = float(next(vals))
+        if "wz" in spec.vel_cmd:
+            vel["wz"] = float(next(vals))
 
-        torso_height = float(next(vals))
+        torso_height = (
+            float(next(vals)) if spec.torso_height_range is not None else None
+        )
 
         style = spec.styles[rng.randint(len(spec.styles))] if spec.styles else ""
 
@@ -198,10 +230,14 @@ class MotionSampler:
         style = spec.styles[self.rng.randint(len(spec.styles))] if spec.styles else ""
 
         vel = {}
-        for key, vr in spec.vel_cmd.items():
-            vel[key] = vr.sample(self.rng)
+        if spec.polar_vel_cmd is not None:
+            speed = spec.polar_vel_cmd.speed.sample(self.rng)
+            direction_deg = spec.polar_vel_cmd.direction_deg.sample(self.rng)
+            vel.update(polar_to_cartesian(speed, direction_deg))
+        for key, velocity_range in spec.vel_cmd.items():
+            vel[key] = velocity_range.sample(self.rng)
 
-        torso_height = self.rng.uniform(*spec.torso_height_range)
+        torso_height = self.rng.uniform(*spec.torso_height_range) if spec.torso_height_range is not None else None
 
         prompt = _prompt_for_spec(spec, style, torso_height, vel)
 
@@ -281,10 +317,13 @@ class MotionSampler:
                 spec_copy = MotionSpec(
                     name=spec.name,
                     description=spec.description,
+                    prompt_override=spec.prompt_override,
+                    arm_swing=spec.arm_swing,
                     duration_range=spec.duration_range,
                     vel_cmd=dict(spec.vel_cmd),
                     torso_height_range=spec.torso_height_range,
                     styles=spec.styles,
+                    polar_vel_cmd=spec.polar_vel_cmd,
                     weight=spec.weight,
                     num_samples=n,
                     diffusion_steps=spec.diffusion_steps,

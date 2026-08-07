@@ -21,6 +21,9 @@ export HF_ENDPOINT=https://hf-mirror.com
 
 # ---- Text encoder: standalone NF4 model (no gated Llama dependency) ----
 export TEXT_ENCODER=llm2vec-nf4
+# Use the declared local NF4 encoder directly. Avoid the default "auto" mode,
+# which first probes an unavailable API service and silently falls back.
+export TEXT_ENCODER_MODE="${TEXT_ENCODER_MODE:-local}"
 
 # ---- Configurable cache / tmp root ----
 # Set KIMODO_CACHE_DIR or KIMODO_TMP_DIR before sourcing to override. Defaults
@@ -53,4 +56,4 @@ mkdir -p "${KIMODO_TMP_DIR}" \
 # ---- GPU defaults ----
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 
-echo "[kimodo] HF_ENDPOINT=${HF_ENDPOINT}  TEXT_ENCODER=${TEXT_ENCODER}  TMPDIR=${TMPDIR}"
+echo "[kimodo] HF_ENDPOINT=${HF_ENDPOINT}  TEXT_ENCODER=${TEXT_ENCODER}  TEXT_ENCODER_MODE=${TEXT_ENCODER_MODE}  TMPDIR=${TMPDIR}"

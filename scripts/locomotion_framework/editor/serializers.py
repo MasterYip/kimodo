@@ -10,6 +10,8 @@ from locomotion_framework.config import (
     LocomotionConfig,
     MotionSpec,
     VelRange,
+    _parse_polar_vel_cmd,
+    _parse_vel_cmd,
     load_config,
 )
 
@@ -83,12 +85,21 @@ def config_to_yaml_str(config: LocomotionConfig, motion_types_only: bool = True)
         buf.write(f"  {name}:\n")
         buf.write(f"    description: \"{spec.description}\"\n")
         buf.write(f"    duration: [{spec.duration_range[0]}, {spec.duration_range[1]}]\n")
-        buf.write("    vel_cmd:\n")
-        for key in ("vx", "vy", "wz"):
-            if key in spec.vel_cmd:
-                vr = spec.vel_cmd[key]
-                buf.write(f"      {key}: [{vr.min}, {vr.max}]\n")
-        buf.write(f"    torso_height: [{spec.torso_height_range[0]}, {spec.torso_height_range[1]}]\n")
+        if spec.vel_cmd:
+            buf.write("    vel_cmd:\n")
+            if spec.polar_vel_cmd is not None:
+                pv = spec.polar_vel_cmd
+                buf.write("      polar:\n")
+                buf.write(f"        speed: [{pv.speed.min}, {pv.speed.max}]\n")
+                buf.write(
+                    f"        direction_deg: [{pv.direction_deg.min}, {pv.direction_deg.max}]\n"
+                )
+            for key in ("vx", "vy", "wz"):
+                if key in spec.vel_cmd:
+                    vr = spec.vel_cmd[key]
+                    buf.write(f"      {key}: [{vr.min}, {vr.max}]\n")
+        if spec.torso_height_range is not None:
+            buf.write(f"    torso_height: [{spec.torso_height_range[0]}, {spec.torso_height_range[1]}]\n")
         if spec.styles:
             buf.write("    styles:\n")
             for s in spec.styles:
@@ -152,18 +163,17 @@ def yaml_str_to_config(yaml_str: str, base_global: GlobalConfig | None = None) -
 
     motion_types = {}
     for name, spec_raw in raw.get("motion_types", {}).items():
-        vel_cmd = {}
-        for key in ("vx", "vy", "wz"):
-            if key in spec_raw.get("vel_cmd", {}):
-                vel_cmd[key] = VelRange.from_list(spec_raw["vel_cmd"][key])
+        vel_raw = spec_raw.get("vel_cmd", {})
+        vel_cmd = _parse_vel_cmd(vel_raw)
 
         spec = MotionSpec(
             name=name,
             description=spec_raw.get("description", ""),
             duration_range=tuple(spec_raw.get("duration", [3.0, 8.0])),
             vel_cmd=vel_cmd,
-            torso_height_range=tuple(spec_raw.get("torso_height", [0.70, 0.85])),
+            torso_height_range=tuple(spec_raw["torso_height"]) if "torso_height" in spec_raw else None,
             styles=spec_raw.get("styles", []),
+            polar_vel_cmd=_parse_polar_vel_cmd(vel_raw),
             weight=spec_raw.get("weight", 1.0),
             num_samples=spec_raw.get("num_samples", 10),
             diffusion_steps=spec_raw.get(
@@ -195,11 +205,12 @@ def config_summary_md(config: LocomotionConfig) -> str:
         vx_s = f"[{vx.min:.1f}, {vx.max:.1f}]" if vx else "—"
         vy_s = f"[{vy.min:.1f}, {vy.max:.1f}]" if vy else "—"
         wz_s = f"[{wz.min:.1f}, {wz.max:.1f}]" if wz else "—"
+        torso_str = f"[{spec.torso_height_range[0]:.2f}, {spec.torso_height_range[1]:.2f}] | " if spec.torso_height_range is not None else "— | "
         lines.append(
             f"| **{name}** | {spec.description[:20]} | "
             f"[{spec.duration_range[0]:.0f}, {spec.duration_range[1]:.0f}]s | "
             f"{vx_s} | {vy_s} | {wz_s} | "
-            f"[{spec.torso_height_range[0]:.2f}, {spec.torso_height_range[1]:.2f}] | "
+            f"{torso_str}"
             f"{', '.join(spec.styles[:2])} | {spec.num_samples} |"
         )
     total = compute_total_motions(config)

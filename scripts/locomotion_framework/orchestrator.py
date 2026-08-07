@@ -3,9 +3,9 @@
 Usage:
     cd /data/masteryip/kimodo/kimodo
     source scripts/env.sh
-    PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
+    PYTHONPATH=scripts python3 -m locomotion_framework.orchestrator \
         --config scripts/locomotion_framework/configs/g1_locomotion.yaml
-    PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
+    PYTHONPATH=scripts python3 -m locomotion_framework.orchestrator \
         --config scripts/locomotion_framework/configs/g1_locomotion.yaml --dry-run
 """
 
@@ -34,7 +34,42 @@ from .constraints import build_constraints_json
 from .export_presets import get_preset, list_presets  # noqa: E402
 
 
+KIMODO_MAX_DURATION_S = 10.0
+
+
+def _validate_generation_timing(
+    configured_fps: float,
+    durations: list[float],
+    model_fps: float,
+) -> None:
+    """Reject FPS mismatches and clips beyond Kimodo's supported horizon."""
+    if not np.isclose(float(configured_fps), float(model_fps), atol=1e-8):
+        raise ValueError(
+            f"Configured fps={configured_fps:g} does not match the loaded model's native "
+            f"fps={model_fps:g}. Kimodo frames must not be relabeled or temporally compressed."
+        )
+    too_long = [duration for duration in durations if duration > KIMODO_MAX_DURATION_S + 1e-8]
+    if too_long:
+        raise ValueError(
+            f"Requested duration {max(too_long):g}s exceeds Kimodo's supported "
+            f"{KIMODO_MAX_DURATION_S:g}s horizon ({int(round(model_fps * KIMODO_MAX_DURATION_S))} frames)."
+        )
+
+
+def _assign_global_indices(samples: list[SampledMotion]) -> None:
+    """Assign the manifest index used by the RLTracker export filename."""
+    for index, sample in enumerate(samples):
+        sample._global_idx = index
+
+
 # ── output helpers ───────────────────────────────────────────────
+
+
+def _polar_components(vel: dict[str, float]) -> tuple[float, float]:
+    """Return planar speed and direction in degrees from sampled vx/vy."""
+    vx = vel.get("vx", 0.0)
+    vy = vel.get("vy", 0.0)
+    return float(np.hypot(vx, vy)), float(np.degrees(np.arctan2(vy, vx)))
 
 
 def _save_metadata(out_dir: Path, samples: list[SampledMotion]) -> None:
@@ -51,7 +86,9 @@ def _save_metadata(out_dir: Path, samples: list[SampledMotion]) -> None:
             "prompt": s.prompt,
             "duration_s": round(s.duration, 2),
             "vel": {k: round(v, 4) for k, v in s.vel.items()},
-            "torso_height": round(s.torso_height, 3),
+            "speed_mps": round(_polar_components(s.vel)[0], 4),
+            "direction_deg": round(_polar_components(s.vel)[1], 4),
+            "torso_height": round(s.torso_height, 3) if s.torso_height is not None else None,
             "style": s.style,
             "diffusion_steps": s.diffusion_steps,
         })
@@ -68,7 +105,7 @@ def _save_manifest(csv_path: Path, all_samples: list[SampledMotion],
         writer = csv.writer(f)
         writer.writerow([
             "index", "motion_type", "prompt", "duration_s",
-            "vx", "vy", "wz", "torso_height", "style",
+            "vx", "vy", "wz", "speed_mps", "direction_deg", "torso_height", "style",
             "path",
         ])
         for i, s in enumerate(all_samples):
@@ -89,7 +126,9 @@ def _save_manifest(csv_path: Path, all_samples: list[SampledMotion],
                 round(s.vel.get("vx", 0), 4),
                 round(s.vel.get("vy", 0), 4),
                 round(s.vel.get("wz", 0), 4),
-                round(s.torso_height, 3),
+                round(_polar_components(s.vel)[0], 4),
+                round(_polar_components(s.vel)[1], 4),
+                round(s.torso_height, 3) if s.torso_height is not None else "",
                 s.style,
                 path_str,
             ])
@@ -121,6 +160,7 @@ def run_generation(
     # Generate batch specs
     method = config.global_.sampling_method
     batch_specs = sampler.generate_batch_specs(method=method, rerank=config.global_.rerank)
+    _assign_global_indices([sample for samples in batch_specs.values() for sample in samples])
     total_motions = sum(len(s) for s in batch_specs.values())
     print(f"=== Locomotion Batch Generation ===")
     print(f"Model: {config.global_.model} | Sampling: {method} | Preset: {preset}")
@@ -142,7 +182,8 @@ def run_generation(
                 print(f"  [{global_idx:03d}] {name}")
                 print(f"        prompt: {s.prompt}")
                 if s.vel:
-                    print(f"        vel={s.vel} torso={s.torso_height:.2f}")
+                    torso_str = f"{s.torso_height:.2f}" if s.torso_height is not None else "—"
+                    print(f"        vel={s.vel} torso={torso_str}")
                 global_idx += 1
             global_idx += max(0, len(samples) - 3)
         print()
@@ -165,7 +206,8 @@ def run_generation(
             print(f"  Vel:     vx=[{vx_range.min:.2f}, {vx_range.max:.2f}] "
                   f"vy=[{vy_range.min:.2f}, {vy_range.max:.2f}] "
                   f"wz=[{wz_range.min:.2f}, {wz_range.max:.2f}]")
-            print(f"  Torso:   {spec.torso_height_range}")
+            torso_range_str = f"[{spec.torso_height_range[0]:.2f}, {spec.torso_height_range[1]:.2f}]" if spec.torso_height_range is not None else "unconstrained"
+            print(f"  Torso:   {torso_range_str}")
             print(f"  Styles:  {spec.styles}")
 
         if dry_run:
@@ -176,7 +218,8 @@ def run_generation(
                 for i, s in enumerate(samples[:3]):
                     print(f"  [{i:03d}] {s.prompt}")
                     if s.vel:
-                        print(f"        vel={s.vel} torso={s.torso_height:.2f}")
+                        torso_str = f"{s.torso_height:.2f}" if s.torso_height is not None else "—"
+                        print(f"        vel={s.vel} torso={torso_str}")
                 if n > 3:
                     print(f"  ... and {n - 3} more")
                 all_samples.extend(samples)
@@ -206,6 +249,10 @@ def run_generation(
         print(f"  ✓ Generated in {elapsed:.1f}s ({elapsed/n:.2f}s/sample)")
 
         all_samples.extend(samples)
+
+    if dry_run:
+        print(f"Dry run complete: {total_motions} sampled motions; no files written.")
+        return
 
     # Save manifest
     _save_manifest(output_base / "manifest.csv", all_samples,
@@ -243,6 +290,7 @@ def _generate_batch(
     """
     from kimodo import load_model
     from kimodo.constraints import load_constraints_lst
+    from kimodo.tools import seed_everything
 
     # Load model once per batch
     model, resolved_name = load_model(
@@ -252,8 +300,22 @@ def _generate_batch(
     )
 
     n = len(samples)
-    fps = config.global_.fps
+    model_fps = float(model.motion_rep.fps)
+    _validate_generation_timing(
+        config.global_.fps,
+        [float(sample.duration) for sample in samples],
+        model_fps,
+    )
+    fps = model_fps
     seed_val = config.global_.seed if config.global_.seed is not None else 0
+    batch_seed = seed_val + min(getattr(sample, "_global_idx", 0) for sample in samples)
+    seed_everything(batch_seed, deterministic=True)
+    root2d_cfg = config.global_.root2d_constraint
+    print(
+        f"  Provenance: resolved_model={resolved_name} native_fps={model_fps:g} "
+        f"batch_seed={batch_seed} max_duration_s={KIMODO_MAX_DURATION_S:g} "
+        f"root2d_enabled={root2d_cfg.enabled} root2d_stride={root2d_cfg.stride}"
+    )
 
     # ── Build per-sample lists (demo 05_root_path method) ────────────
     per_prompts: list[str] = []
@@ -264,7 +326,10 @@ def _generate_batch(
         per_prompts.append(s.prompt)
         per_frames.append(int(round(s.duration * fps)))
         per_constraints_raw.append(
-            build_constraints_json(s, fps=fps)
+            build_constraints_json(
+                s, fps=fps, enabled=root2d_cfg.enabled,
+                stride=root2d_cfg.stride,
+            )
         )
 
     # Convert to Kimodo constraint objects
@@ -317,7 +382,7 @@ def _generate_batch(
                 single=single,
                 model=model,
                 fps=fps,
-                sample_idx=i,
+                sample_idx=getattr(sample, "_global_idx", i),
                 sample=sample,
                 seed=seed_val,
                 output_base=out_dir,
@@ -409,7 +474,7 @@ def _export_kimodo(
         converter = MujocoQposConverter(model.skeleton)
         qpos = converter.dict_to_qpos(single, device)
         csv_path = out_dir / f"{stem}.csv"
-        np.savetxt(str(csv_path), qpos.cpu().numpy(), delimiter=",")
+        np.savetxt(str(csv_path), qpos.cpu().numpy() if hasattr(qpos, "cpu") else np.asarray(qpos), delimiter=",")
 
 
 def _export_rltracker(
@@ -518,6 +583,7 @@ def main():
         sampler = MotionSampler(config, seed=config.global_.seed)
         method = config.global_.sampling_method
         all_samples = sampler.generate_random_specs(args.num_total, method=method, rerank=config.global_.rerank)
+        _assign_global_indices(all_samples)
 
         print(f"=== Random Sample Mode (method={method}, preset={preset}) ===")
         print(f"Total: {args.num_total} motions across "

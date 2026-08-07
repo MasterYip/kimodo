@@ -30,8 +30,8 @@ global:
 motion_types:
   # ── Walk — all directions, all turning rates ───────────────────
   walk:
-    description: "a person walks"
-    duration: [5.0, 8.0]
+    description: "a robot walks"
+    duration: [8.0, 8.0]
     vel_cmd:
       # forward (+) / backward (-), full walking speed range
       vx: [-0.60, 0.80]
@@ -48,10 +48,10 @@ motion_types:
 
   # ── Run — forward only ─────────────────────────────────────────
   run:
-    description: "a person runs"
-    duration: [5.0, 8.0]
+    description: "a robot runs"
+    duration: [8.0, 8.0]
     vel_cmd:
-      vx: [-1.0, 2.00]
+      vx: [0.5, 2.00]
       vy: [-1.0, 1.00]
       wz: [-0.5, 0.5]
     torso_height: [0.65, 0.80]
@@ -63,12 +63,27 @@ motion_types:
 
   # ── Stand ──────────────────────────────────────────────────────
   stand:
-    description: "a person stands"
-    duration: [5.0, 8.0]
+    description: "a robot stands"
+    duration: [8.0, 8.0]
     vel_cmd:
       vx: [-0.10, 0.10]
       vy: [-0.10, 0.10]
-      wz: [-0.3, 0.3]
+      wz: [-0.20, 0.20]
+    torso_height: [0.80, 0.90]
+    styles:
+      - "steadily"
+      - "normally"
+    weight: 0.30
+    num_samples: 50
+
+  # ── Stand Turn ──────────────────────────────────────────────────────
+  stand_turn:
+    description: "a robot turning in place"
+    duration: [8.0, 8.0]
+    vel_cmd:
+      vx: [-0.10, 0.10]
+      vy: [-0.10, 0.10]
+      wz: [-1.0, 1.0]
     torso_height: [0.80, 0.90]
     styles:
       - "steadily"
@@ -78,15 +93,15 @@ motion_types:
 
   # ── Squat ──────────────────────────────────────────────────────
   squat_move:
-    description: "a person squats and moves"
-    duration: [5.0, 8.0]
+    description: "a robot walking"
+    duration: [8.0, 8.0]
     vel_cmd:
-      vx: [-0.20, 0.30]
-      vy: [-0.10, 0.10]
-      wz: [-0.20, 0.20]
-    torso_height: [0.55, 0.7]
+      vx: [-0.5, 0.5]
+      vy: [-0.5, 0.5]
+      wz: [-0.5, 0.5]
+    torso_height: [0.4, 0.6]
     styles:
       - "normally"
-      - "while staying low"
-    weight: 0.15
+      - "at a steady pace"
+    weight: 0.5
     num_samples: 50

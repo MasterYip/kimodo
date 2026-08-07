@@ -144,7 +144,59 @@ branch, which is tagged).
 
 ## Notes / coordination
 
-- `agent/DATA-KIMODO-VELOCITY-DISTRIBUTION-009` was NOT touched. PM will merge
-  it on top of this branch; its `config.py`/`sampler.py`/`orchestrator.py`
+- `agent/DATA-KIMODO-VELOCITY-DISTRIBUTION-009` was NOT touched during the
+  consolidation. PM's merge directive (2026-08-07) then merged both branches
+  into `fork/main` (see below); its `config.py`/`sampler.py`/`orchestrator.py`
   win in any overlap. This branch intentionally kept the PORT-008 natural
   recipe + polar features reconciled so the merge is clean.
+
+## Main-merge (2026-08-07) — `fork/main`
+
+Per the follow-up user directive ("merge the new branch to main"), both the
+consolidation and the VELOCITY reconciliation were merged onto `fork/main`
+line (base `35b1c92` = fork/main, which already contained PORT-008 `8f59b6f`):
+
+1. **CONSOLIDATION** (`3b55a05`) merged first → clean merge (no conflicts).
+2. **VELOCITY** (`ea8971b`) merged on top → conflicts resolved **VELOCITY wins
+   in semantic overlap**, consolidation-only features preserved.
+
+`fork/main` = `1dabc55` (VELOCITY merge) + `7e79d37` (CONSOLIDATION merge),
+pushed as the new fork main.
+
+### Conflict resolutions (VELOCITY merge, which side won where)
+
+| File | Resolution |
+|---|---|
+| `config.py` | VELOCITY's `prompt_speed_bands` + native-compass `PolarVelRange` doc + `prompt` canonical (`prompt_override` kept as YAML alias). KEPT consolidation's `root2d_constraint`/`Root2DConstraintConfig`, MotionSpec optional-torso defaults, and `arm_swing` parsing (default `"none"`). |
+| `sampler.py` | VELOCITY's `polar_to_cartesian`/`_planar_speed` + `prompt_speed_bands` resolution in `_prompt_for_spec`. KEPT consolidation's `arm_swing`/`exact_prompt` routing (non-conflicting). `_spec_param_ranges`/`_sample` use VELOCITY's cleaner form. |
+| `orchestrator.py` | VELOCITY's native-compass `_polar_components` + polar display + compute-once speed/direction. KEPT consolidation's `_validate_generation_timing`/`seed_everything`/root2d provenance, export-index alignment (`_assign_global_indices`, `sample_idx=getattr(...,"_global_idx",i)`), and the qpos `.cpu()` guard. |
+| `prompts.py` | Both: VELOCITY's planar `_speed_hint` (hypot) + consolidation's `resolve_arm_swing`/`_exact_prompt`/`exact_prompt`/`arm_swing`. |
+| `editor/serializers.py` | VELOCITY's `yaml_str_to_config` + consolidation's polar `config_to_yaml_str` (lossless polar round-trip). |
+| `README.md` | VELOCITY's corrected native-compass sign convention + polar + `prompt_speed_bands` docs. |
+| `tests/test_polar_velocity.py` | Adopted VELOCITY's native-compass version (superset). |
+| New files from VELOCITY | `configs/g1_natural_distributed_velocity.yaml`, `configs/g1_natural_distributed_velocity_canary.yaml`, `configs/g1_polar_direction_speed_24.yaml`, `tests/test_prompt_speed_bands.py`. |
+
+### Backward-compat gate (fork/main merge, 2026-08-07, host, no GPU)
+
+- Configs load + sample: `g1_natural_distributed_velocity.yaml` (8 types / 40
+  samples), `g1_normal_loco.yaml` (5/250), `g1_eight_direction_port_008.yaml`
+  (40/40; 16 `constraint_path` JSONs resolve to root2d constraints),
+  `g1_polar_direction_speed_24.yaml` (8/24), `debug_squat_height.yaml` (5/100),
+  `g1_walk.yaml` (1/200).
+- Tests: **22 passed** — `test_polar_velocity.py` (6), `test_prompt_speed_bands.py`
+  (3), `test_quality_validator.py` (6), `test_evaluation_core.py` (2),
+  `test_prompt_controls.py` (4).
+- `run_distributed.sh`: `bash -n` OK (needs only `yaml` + `g1_normal_loco.yaml`).
+- LocoEditor: all modules compile; serializer round-trips natural + polar +
+  `g1_natural_distributed_velocity.yaml` configs (polar preserved).
+
+### Archive tags (main-merge, annotated, pushed to fork)
+
+| Tag | Target | Reason |
+|---|---|---|
+| `archive/agent-kimodo-branch-consolidation@20260807` | `3b55a05` | merged into main @ `1dabc55` |
+| `archive/agent-data-kimodo-velocity-distribution-009@20260807` | `ea8971b` | merged into main @ `1dabc55` |
+
+The earlier per-branch archive tags (`archive/agent-20260806-data-kimodo-polar-*`,
+`archive/agent-data-kimodo-001-*`, etc.) remain valid — those branches are now
+indirectly merged into main through the consolidation + VELOCITY merges.

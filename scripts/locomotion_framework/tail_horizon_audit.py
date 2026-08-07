@@ -135,10 +135,18 @@ def _plot(rows: list[dict], out_dir: Path, native_fps: float, max_seconds: float
         axis.set_title(title)
         axis.tick_params(axis="x", rotation=55, labelsize=7)
         axis.set_yscale("log")
-    fig.suptitle(
-        f"Tail failure after official model horizon ({max_seconds:g}s × {native_fps:g} FPS = "
-        f"{int(round(max_seconds * native_fps))} frames)"
-    )
+    crosses_horizon = any(bool(row["crosses_supported_horizon"]) for row in rows)
+    if crosses_horizon:
+        title = (
+            f"Tail failure after official model horizon ({max_seconds:g}s × {native_fps:g} FPS = "
+            f"{int(round(max_seconds * native_fps))} frames)"
+        )
+    else:
+        title = (
+            f"Tail stationarity within official model horizon (all clips < "
+            f"{int(round(max_seconds * native_fps))} frames)"
+        )
+    fig.suptitle(title)
     fig.tight_layout()
     ratio_path = out_dir / "tail_horizon_ratios_by_motion_type.png"
     fig.savefig(ratio_path, dpi=180)
@@ -156,7 +164,12 @@ def _plot(rows: list[dict], out_dir: Path, native_fps: float, max_seconds: float
     ax.axvline(horizon, color="#d62728", linewidth=2, label=f"supported horizon: {horizon:g} frames")
     ax.axhline(1.0, color="black", linewidth=0.8, linestyle="--")
     ax.set_yscale("log")
-    ax.set(xlabel="exported frame count", ylabel="post/pre root jitter ratio", title="All rejected pilots cross the model horizon")
+    boundary_title = (
+        "Rejected pilots cross the model horizon"
+        if crosses_horizon
+        else "Replacement clips remain within the model horizon"
+    )
+    ax.set(xlabel="exported frame count", ylabel="later/earlier root jitter ratio", title=boundary_title)
     handles, labels = ax.get_legend_handles_labels()
     unique = dict(zip(labels, handles))
     ax.legend(unique.values(), unique.keys(), fontsize=7, ncol=2)

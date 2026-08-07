@@ -1,0 +1,1049 @@
+# =============================================================================
+# DATA-KIMODO-TORSO-HEIGHT-DISTRIBUTION-013 — CANARY gate config.
+# 32 motions = 8 directions x 4 2-D corners:
+#   (slow ~0.11, torso ~0.455)   (fast ~1.45, torso ~0.455)
+#   (slow ~0.11, torso ~0.775)   (fast ~1.45, torso ~0.775)
+# Same prompt_speed_bands + torso-hint composition as the full config;
+# direction_deg = group centre +/- 15 deg (native compass: +90 left, -90 right).
+# Canary verifies from qpos: (a) traveled direction matches prompt,
+# (b) ACHIEVED root/pelvis height differs from neutral and spreads across
+# [0.45, 0.8] (make-or-break: model must respond to the torso text signal),
+# (c) naturalness (HHOP low, head_z > 0.2 m, checked on the local FK).
+global:
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 20260808
+  fps: 30
+  output_dir: /data/masteryip/kimodo/datasets/DATA-KIMODO-TORSO-HEIGHT-DISTRIBUTION-013/canary_raw
+  sampling_method: uniform
+  rerank: ''
+  export_preset: rltracker
+  cfg_type: separated
+  cfg_weight:
+  - 2.0
+  - 2.0
+motion_types:
+  d00_forward_slow_low:
+    description: A person walks forward.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 0.1
+        - 0.13
+        direction_deg:
+        - -15
+        - 15
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.45
+    - 0.46
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly forward.
+    - - 0.85
+      - A person walks forward.
+    - - 1.2
+      - A person walks briskly forward.
+    - - 1.51
+      - A person jogs forward.
+    num_samples: 1
+  d00_forward_fast_low:
+    description: A person walks forward.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 1.4
+        - 1.5
+        direction_deg:
+        - -15
+        - 15
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.45
+    - 0.46
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly forward.
+    - - 0.85
+      - A person walks forward.
+    - - 1.2
+      - A person walks briskly forward.
+    - - 1.51
+      - A person jogs forward.
+    num_samples: 1
+  d00_forward_slow_neu:
+    description: A person walks forward.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 0.1
+        - 0.13
+        direction_deg:
+        - -15
+        - 15
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.77
+    - 0.78
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly forward.
+    - - 0.85
+      - A person walks forward.
+    - - 1.2
+      - A person walks briskly forward.
+    - - 1.51
+      - A person jogs forward.
+    num_samples: 1
+  d00_forward_fast_neu:
+    description: A person walks forward.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 1.4
+        - 1.5
+        direction_deg:
+        - -15
+        - 15
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.77
+    - 0.78
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly forward.
+    - - 0.85
+      - A person walks forward.
+    - - 1.2
+      - A person walks briskly forward.
+    - - 1.51
+      - A person jogs forward.
+    num_samples: 1
+  d01_forward_right_slow_low:
+    description: A person walks forward to the right.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 0.1
+        - 0.13
+        direction_deg:
+        - -60
+        - -30
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.45
+    - 0.46
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly forward to the right.
+    - - 0.85
+      - A person walks forward to the right.
+    - - 1.2
+      - A person walks briskly forward to the right.
+    - - 1.51
+      - A person jogs forward to the right.
+    num_samples: 1
+  d01_forward_right_fast_low:
+    description: A person walks forward to the right.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 1.4
+        - 1.5
+        direction_deg:
+        - -60
+        - -30
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.45
+    - 0.46
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly forward to the right.
+    - - 0.85
+      - A person walks forward to the right.
+    - - 1.2
+      - A person walks briskly forward to the right.
+    - - 1.51
+      - A person jogs forward to the right.
+    num_samples: 1
+  d01_forward_right_slow_neu:
+    description: A person walks forward to the right.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 0.1
+        - 0.13
+        direction_deg:
+        - -60
+        - -30
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.77
+    - 0.78
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly forward to the right.
+    - - 0.85
+      - A person walks forward to the right.
+    - - 1.2
+      - A person walks briskly forward to the right.
+    - - 1.51
+      - A person jogs forward to the right.
+    num_samples: 1
+  d01_forward_right_fast_neu:
+    description: A person walks forward to the right.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 1.4
+        - 1.5
+        direction_deg:
+        - -60
+        - -30
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.77
+    - 0.78
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly forward to the right.
+    - - 0.85
+      - A person walks forward to the right.
+    - - 1.2
+      - A person walks briskly forward to the right.
+    - - 1.51
+      - A person jogs forward to the right.
+    num_samples: 1
+  d02_right_slow_low:
+    description: A person walks to the right.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 0.1
+        - 0.13
+        direction_deg:
+        - -105
+        - -75
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.45
+    - 0.46
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly to the right.
+    - - 0.85
+      - A person walks to the right.
+    - - 1.2
+      - A person walks briskly to the right.
+    - - 1.51
+      - A person jogs to the right.
+    num_samples: 1
+  d02_right_fast_low:
+    description: A person walks to the right.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 1.4
+        - 1.5
+        direction_deg:
+        - -105
+        - -75
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.45
+    - 0.46
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly to the right.
+    - - 0.85
+      - A person walks to the right.
+    - - 1.2
+      - A person walks briskly to the right.
+    - - 1.51
+      - A person jogs to the right.
+    num_samples: 1
+  d02_right_slow_neu:
+    description: A person walks to the right.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 0.1
+        - 0.13
+        direction_deg:
+        - -105
+        - -75
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.77
+    - 0.78
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly to the right.
+    - - 0.85
+      - A person walks to the right.
+    - - 1.2
+      - A person walks briskly to the right.
+    - - 1.51
+      - A person jogs to the right.
+    num_samples: 1
+  d02_right_fast_neu:
+    description: A person walks to the right.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 1.4
+        - 1.5
+        direction_deg:
+        - -105
+        - -75
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.77
+    - 0.78
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly to the right.
+    - - 0.85
+      - A person walks to the right.
+    - - 1.2
+      - A person walks briskly to the right.
+    - - 1.51
+      - A person jogs to the right.
+    num_samples: 1
+  d03_backward_right_slow_low:
+    description: A person walks backward to the right.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 0.1
+        - 0.13
+        direction_deg:
+        - -150
+        - -120
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.45
+    - 0.46
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly backward to the right.
+    - - 0.85
+      - A person walks backward to the right.
+    - - 1.2
+      - A person walks briskly backward to the right.
+    - - 1.51
+      - A person jogs backward to the right.
+    num_samples: 1
+  d03_backward_right_fast_low:
+    description: A person walks backward to the right.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 1.4
+        - 1.5
+        direction_deg:
+        - -150
+        - -120
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.45
+    - 0.46
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly backward to the right.
+    - - 0.85
+      - A person walks backward to the right.
+    - - 1.2
+      - A person walks briskly backward to the right.
+    - - 1.51
+      - A person jogs backward to the right.
+    num_samples: 1
+  d03_backward_right_slow_neu:
+    description: A person walks backward to the right.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 0.1
+        - 0.13
+        direction_deg:
+        - -150
+        - -120
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.77
+    - 0.78
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly backward to the right.
+    - - 0.85
+      - A person walks backward to the right.
+    - - 1.2
+      - A person walks briskly backward to the right.
+    - - 1.51
+      - A person jogs backward to the right.
+    num_samples: 1
+  d03_backward_right_fast_neu:
+    description: A person walks backward to the right.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 1.4
+        - 1.5
+        direction_deg:
+        - -150
+        - -120
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.77
+    - 0.78
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly backward to the right.
+    - - 0.85
+      - A person walks backward to the right.
+    - - 1.2
+      - A person walks briskly backward to the right.
+    - - 1.51
+      - A person jogs backward to the right.
+    num_samples: 1
+  d04_backward_slow_low:
+    description: A person walks backward.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 0.1
+        - 0.13
+        direction_deg:
+        - 165
+        - 195
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.45
+    - 0.46
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly backward.
+    - - 0.85
+      - A person walks backward.
+    - - 1.2
+      - A person walks briskly backward.
+    - - 1.51
+      - A person jogs backward.
+    num_samples: 1
+  d04_backward_fast_low:
+    description: A person walks backward.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 1.4
+        - 1.5
+        direction_deg:
+        - 165
+        - 195
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.45
+    - 0.46
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly backward.
+    - - 0.85
+      - A person walks backward.
+    - - 1.2
+      - A person walks briskly backward.
+    - - 1.51
+      - A person jogs backward.
+    num_samples: 1
+  d04_backward_slow_neu:
+    description: A person walks backward.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 0.1
+        - 0.13
+        direction_deg:
+        - 165
+        - 195
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.77
+    - 0.78
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly backward.
+    - - 0.85
+      - A person walks backward.
+    - - 1.2
+      - A person walks briskly backward.
+    - - 1.51
+      - A person jogs backward.
+    num_samples: 1
+  d04_backward_fast_neu:
+    description: A person walks backward.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 1.4
+        - 1.5
+        direction_deg:
+        - 165
+        - 195
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.77
+    - 0.78
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly backward.
+    - - 0.85
+      - A person walks backward.
+    - - 1.2
+      - A person walks briskly backward.
+    - - 1.51
+      - A person jogs backward.
+    num_samples: 1
+  d05_backward_left_slow_low:
+    description: A person walks backward to the left.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 0.1
+        - 0.13
+        direction_deg:
+        - 120
+        - 150
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.45
+    - 0.46
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly backward to the left.
+    - - 0.85
+      - A person walks backward to the left.
+    - - 1.2
+      - A person walks briskly backward to the left.
+    - - 1.51
+      - A person jogs backward to the left.
+    num_samples: 1
+  d05_backward_left_fast_low:
+    description: A person walks backward to the left.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 1.4
+        - 1.5
+        direction_deg:
+        - 120
+        - 150
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.45
+    - 0.46
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly backward to the left.
+    - - 0.85
+      - A person walks backward to the left.
+    - - 1.2
+      - A person walks briskly backward to the left.
+    - - 1.51
+      - A person jogs backward to the left.
+    num_samples: 1
+  d05_backward_left_slow_neu:
+    description: A person walks backward to the left.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 0.1
+        - 0.13
+        direction_deg:
+        - 120
+        - 150
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.77
+    - 0.78
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly backward to the left.
+    - - 0.85
+      - A person walks backward to the left.
+    - - 1.2
+      - A person walks briskly backward to the left.
+    - - 1.51
+      - A person jogs backward to the left.
+    num_samples: 1
+  d05_backward_left_fast_neu:
+    description: A person walks backward to the left.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 1.4
+        - 1.5
+        direction_deg:
+        - 120
+        - 150
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.77
+    - 0.78
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly backward to the left.
+    - - 0.85
+      - A person walks backward to the left.
+    - - 1.2
+      - A person walks briskly backward to the left.
+    - - 1.51
+      - A person jogs backward to the left.
+    num_samples: 1
+  d06_left_slow_low:
+    description: A person walks to the left.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 0.1
+        - 0.13
+        direction_deg:
+        - 75
+        - 105
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.45
+    - 0.46
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly to the left.
+    - - 0.85
+      - A person walks to the left.
+    - - 1.2
+      - A person walks briskly to the left.
+    - - 1.51
+      - A person jogs to the left.
+    num_samples: 1
+  d06_left_fast_low:
+    description: A person walks to the left.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 1.4
+        - 1.5
+        direction_deg:
+        - 75
+        - 105
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.45
+    - 0.46
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly to the left.
+    - - 0.85
+      - A person walks to the left.
+    - - 1.2
+      - A person walks briskly to the left.
+    - - 1.51
+      - A person jogs to the left.
+    num_samples: 1
+  d06_left_slow_neu:
+    description: A person walks to the left.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 0.1
+        - 0.13
+        direction_deg:
+        - 75
+        - 105
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.77
+    - 0.78
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly to the left.
+    - - 0.85
+      - A person walks to the left.
+    - - 1.2
+      - A person walks briskly to the left.
+    - - 1.51
+      - A person jogs to the left.
+    num_samples: 1
+  d06_left_fast_neu:
+    description: A person walks to the left.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 1.4
+        - 1.5
+        direction_deg:
+        - 75
+        - 105
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.77
+    - 0.78
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly to the left.
+    - - 0.85
+      - A person walks to the left.
+    - - 1.2
+      - A person walks briskly to the left.
+    - - 1.51
+      - A person jogs to the left.
+    num_samples: 1
+  d07_forward_left_slow_low:
+    description: A person walks forward to the left.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 0.1
+        - 0.13
+        direction_deg:
+        - 30
+        - 60
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.45
+    - 0.46
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly forward to the left.
+    - - 0.85
+      - A person walks forward to the left.
+    - - 1.2
+      - A person walks briskly forward to the left.
+    - - 1.51
+      - A person jogs forward to the left.
+    num_samples: 1
+  d07_forward_left_fast_low:
+    description: A person walks forward to the left.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 1.4
+        - 1.5
+        direction_deg:
+        - 30
+        - 60
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.45
+    - 0.46
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly forward to the left.
+    - - 0.85
+      - A person walks forward to the left.
+    - - 1.2
+      - A person walks briskly forward to the left.
+    - - 1.51
+      - A person jogs forward to the left.
+    num_samples: 1
+  d07_forward_left_slow_neu:
+    description: A person walks forward to the left.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 0.1
+        - 0.13
+        direction_deg:
+        - 30
+        - 60
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.77
+    - 0.78
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly forward to the left.
+    - - 0.85
+      - A person walks forward to the left.
+    - - 1.2
+      - A person walks briskly forward to the left.
+    - - 1.51
+      - A person jogs forward to the left.
+    num_samples: 1
+  d07_forward_left_fast_neu:
+    description: A person walks forward to the left.
+    duration:
+    - 8.0
+    - 8.0
+    vel_cmd:
+      polar:
+        speed:
+        - 1.4
+        - 1.5
+        direction_deg:
+        - 30
+        - 60
+      wz:
+      - 0.0
+      - 0.0
+    torso_height:
+    - 0.77
+    - 0.78
+    styles: []
+    prompt_speed_bands:
+    - - 0.15
+      - A person stands still.
+    - - 0.45
+      - A person walks slowly forward to the left.
+    - - 0.85
+      - A person walks forward to the left.
+    - - 1.2
+      - A person walks briskly forward to the left.
+    - - 1.51
+      - A person jogs forward to the left.
+    num_samples: 1

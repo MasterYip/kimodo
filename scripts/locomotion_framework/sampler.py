@@ -11,7 +11,7 @@ from typing import Optional
 import numpy as np
 
 from .config import LocomotionConfig, MotionSpec
-from .prompts import build_motion_prompt
+from .prompts import _torso_height_hint, build_motion_prompt
 
 
 @dataclass
@@ -63,7 +63,13 @@ def _prompt_for_spec(spec: MotionSpec, style: str, torso_height: Optional[float]
 
     Resolution order:
       1. ``prompt_speed_bands`` — exact prompt selected by the sampled planar
-         speed (first band whose max_speed is strictly above the speed).
+         speed (first band whose max_speed is strictly above the speed), with
+         the torso-height descriptor appended when the sampled ``torso_height``
+         is off-neutral (``_torso_height_hint`` non-empty).  This lets the
+         speed-band prompt ALSO carry the posture signal (e.g.
+         "A person walks forward, crouching very low.").  Configs that keep
+         the neutral 0.77 torso (hint empty) are byte-equivalent to the prior
+         behaviour.
       2. ``prompt`` exact override — used verbatim.
       3. Otherwise composed from description/style/torso/speed hints (speed
          hint suppressed when ``spec.speed_hint`` is False).
@@ -77,6 +83,9 @@ def _prompt_for_spec(spec: MotionSpec, style: str, torso_height: Optional[float]
                 break
         if prompt is None:
             prompt = spec.prompt_speed_bands[-1][1]
+        hint = _torso_height_hint(torso_height) if torso_height is not None else ""
+        if hint:
+            return f"{prompt.rstrip('.')}, {hint}."
         return prompt.rstrip(".") + "."
     if spec.prompt:
         return spec.prompt.rstrip(".") + "."

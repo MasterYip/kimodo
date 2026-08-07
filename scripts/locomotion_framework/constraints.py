@@ -205,6 +205,7 @@ def build_constraints_json(
     fps: int = 30,
     duration_override: float | None = None,
     stride: int | None = None,
+    enabled: bool = True,
 ) -> list[dict]:
     """Build the full constraints list for a sampled motion.
 
@@ -224,6 +225,8 @@ def build_constraints_json(
                            generate-and-truncate mode).
         stride:            Override constraint stride (None = use sample.stride,
                            then the framework default 1).
+                           stride=1 for dense, stride=3+ for sparse.
+        enabled:           False emits no Root2D while preserving ``sample.vel``.
     """
     # 1. Exact constraint file.
     if sample.constraint_path:
@@ -244,7 +247,7 @@ def build_constraints_json(
         np.radians(sample.heading_deg) if sample.heading_deg is not None else 0.0
     )
 
-    if sample.vel and any(abs(v) > 1e-6 for v in sample.vel.values()):
+    if enabled and sample.vel and any(abs(v) > 1e-6 for v in sample.vel.values()):
         root_constraint = build_root2d_constraint(
             sample.vel,
             duration,

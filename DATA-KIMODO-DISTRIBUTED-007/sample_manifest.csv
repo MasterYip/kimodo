@@ -1,0 +1,41 @@
+cell,sample,direction,prompt,duration_s,seed,diffusion_steps,constraint,native_stem
+E0,e0_d00_forward_s20260805,d00_forward,A person walks forward.,8.0,20260805,100,none,native/e0_d00_forward_s20260805
+E0,e0_d01_forward_right_s20260805,d01_forward_right,A person walks forward to the right.,8.0,20260805,100,none,native/e0_d01_forward_right_s20260805
+E0,e0_d02_right_s20260805,d02_right,A person walks to the right.,8.0,20260805,100,none,native/e0_d02_right_s20260805
+E0,e0_d03_backward_right_s20260805,d03_backward_right,A person walks backward to the right.,8.0,20260805,100,none,native/e0_d03_backward_right_s20260805
+E0,e0_d04_backward_s20260805,d04_backward,A person walks backward.,8.0,20260805,100,none,native/e0_d04_backward_s20260805
+E0,e0_d05_backward_left_s20260805,d05_backward_left,A person walks backward to the left.,8.0,20260805,100,none,native/e0_d05_backward_left_s20260805
+E0,e0_d06_left_s20260805,d06_left,A person walks to the left.,8.0,20260805,100,none,native/e0_d06_left_s20260805
+E0,e0_d07_forward_left_s20260805,d07_forward_left,A person walks forward to the left.,8.0,20260805,100,none,native/e0_d07_forward_left_s20260805
+E1,e1_d00_forward_s20260805,d00_forward,A person walks forward.,8.0,20260805,100,constraints/E1_d00_forward.constraints.json,native/e1_d00_forward_s20260805
+E1,e1_d01_forward_right_s20260805,d01_forward_right,A person walks forward to the right.,8.0,20260805,100,constraints/E1_d01_forward_right.constraints.json,native/e1_d01_forward_right_s20260805
+E1,e1_d02_right_s20260805,d02_right,A person walks to the right.,8.0,20260805,100,constraints/E1_d02_right.constraints.json,native/e1_d02_right_s20260805
+E1,e1_d03_backward_right_s20260805,d03_backward_right,A person walks backward to the right.,8.0,20260805,100,constraints/E1_d03_backward_right.constraints.json,native/e1_d03_backward_right_s20260805
+E1,e1_d04_backward_s20260805,d04_backward,A person walks backward.,8.0,20260805,100,constraints/E1_d04_backward.constraints.json,native/e1_d04_backward_s20260805
+E1,e1_d05_backward_left_s20260805,d05_backward_left,A person walks backward to the left.,8.0,20260805,100,constraints/E1_d05_backward_left.constraints.json,native/e1_d05_backward_left_s20260805
+E1,e1_d06_left_s20260805,d06_left,A person walks to the left.,8.0,20260805,100,constraints/E1_d06_left.constraints.json,native/e1_d06_left_s20260805
+E1,e1_d07_forward_left_s20260805,d07_forward_left,A person walks forward to the left.,8.0,20260805,100,constraints/E1_d07_forward_left.constraints.json,native/e1_d07_forward_left_s20260805
+E2,e2_d00_forward_s20260805,d00_forward,A person walks forward.,8.0,20260805,100,constraints/E2_d00_forward.constraints.json,native/e2_d00_forward_s20260805
+E2,e2_d01_forward_right_s20260805,d01_forward_right,A person walks forward to the right.,8.0,20260805,100,constraints/E2_d01_forward_right.constraints.json,native/e2_d01_forward_right_s20260805
+E2,e2_d02_right_s20260805,d02_right,A person walks to the right.,8.0,20260805,100,constraints/E2_d02_right.constraints.json,native/e2_d02_right_s20260805
+E2,e2_d03_backward_right_s20260805,d03_backward_right,A person walks backward to the right.,8.0,20260805,100,constraints/E2_d03_backward_right.constraints.json,native/e2_d03_backward_right_s20260805
+E2,e2_d04_backward_s20260805,d04_backward,A person walks backward.,8.0,20260805,100,constraints/E2_d04_backward.constraints.json,native/e2_d04_backward_s20260805
+E2,e2_d05_backward_left_s20260805,d05_backward_left,A person walks backward to the left.,8.0,20260805,100,constraints/E2_d05_backward_left.constraints.json,native/e2_d05_backward_left_s20260805
+E2,e2_d06_left_s20260805,d06_left,A person walks to the left.,8.0,20260805,100,constraints/E2_d06_left.constraints.json,native/e2_d06_left_s20260805
+E2,e2_d07_forward_left_s20260805,d07_forward_left,A person walks forward to the left.,8.0,20260805,100,constraints/E2_d07_forward_left.constraints.json,native/e2_d07_forward_left_s20260805
+E3,e3_d00_forward_s20260805,d00_forward,A person walks forward.,8.0,20260805,100,constraints/E3_d00_forward.constraints.json,native/e3_d00_forward_s20260805
+E3,e3_d01_forward_right_s20260805,d01_forward_right,A person walks forward to the right.,8.0,20260805,100,constraints/E3_d01_forward_right.constraints.json,native/e3_d01_forward_right_s20260805
+E3,e3_d02_right_s20260805,d02_right,A person walks to the right.,8.0,20260805,100,constraints/E3_d02_right.constraints.json,native/e3_d02_right_s20260805
+E3,e3_d03_backward_right_s20260805,d03_backward_right,A person walks backward to the right.,8.0,20260805,100,constraints/E3_d03_backward_right.constraints.json,native/e3_d03_backward_right_s20260805
+E3,e3_d04_backward_s20260805,d04_backward,A person walks backward.,8.0,20260805,100,constraints/E3_d04_backward.constraints.json,native/e3_d04_backward_s20260805
+E3,e3_d05_backward_left_s20260805,d05_backward_left,A person walks backward to the left.,8.0,20260805,100,constraints/E3_d05_backward_left.constraints.json,native/e3_d05_backward_left_s20260805
+E3,e3_d06_left_s20260805,d06_left,A person walks to the left.,8.0,20260805,100,constraints/E3_d06_left.constraints.json,native/e3_d06_left_s20260805
+E3,e3_d07_forward_left_s20260805,d07_forward_left,A person walks forward to the left.,8.0,20260805,100,constraints/E3_d07_forward_left.constraints.json,native/e3_d07_forward_left_s20260805
+E4,e4_d00_forward_s20260805,d00_forward,A person walks forward.,8.0,20260805,100,constraints/E4_d00_forward.constraints.json,native/e4_d00_forward_s20260805
+E4,e4_d01_forward_right_s20260805,d01_forward_right,A person walks forward to the right.,8.0,20260805,100,constraints/E4_d01_forward_right.constraints.json,native/e4_d01_forward_right_s20260805
+E4,e4_d02_right_s20260805,d02_right,A person walks to the right.,8.0,20260805,100,constraints/E4_d02_right.constraints.json,native/e4_d02_right_s20260805
+E4,e4_d03_backward_right_s20260805,d03_backward_right,A person walks backward to the right.,8.0,20260805,100,constraints/E4_d03_backward_right.constraints.json,native/e4_d03_backward_right_s20260805
+E4,e4_d04_backward_s20260805,d04_backward,A person walks backward.,8.0,20260805,100,constraints/E4_d04_backward.constraints.json,native/e4_d04_backward_s20260805
+E4,e4_d05_backward_left_s20260805,d05_backward_left,A person walks backward to the left.,8.0,20260805,100,constraints/E4_d05_backward_left.constraints.json,native/e4_d05_backward_left_s20260805
+E4,e4_d06_left_s20260805,d06_left,A person walks to the left.,8.0,20260805,100,constraints/E4_d06_left.constraints.json,native/e4_d06_left_s20260805
+E4,e4_d07_forward_left_s20260805,d07_forward_left,A person walks forward to the left.,8.0,20260805,100,constraints/E4_d07_forward_left.constraints.json,native/e4_d07_forward_left_s20260805

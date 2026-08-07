@@ -227,6 +227,79 @@ how the `g1_natural_distributed_velocity.yaml` config keeps "A person walks
 
 ---
 
+## Best validated configs
+
+These are the natural-recipe configs that were generated on 4090-3 and
+evaluated end-to-end (HHOP = hand-hip-overlap proxy, 0–100 lower = better,
+from the pelvis-frame URDF-FK eval CSVs). All share the **frozen natural
+recipe**:
+
+- `duration ≥ 8 s` (all `[8.0, 8.0]`)
+- exact per-speed prompts (`prompt_speed_bands`) that track the speed spectrum
+- native-compass sign (0° = forward, +90° = left, −90° = right — the
+  PORT-008-verified convention; see `PolarVelRange`)
+- separated CFG `[2.0, 2.0]` (`cfg_type: separated`, `cfg_weight: [2.0, 2.0]`)
+- a fixed seed, `styles: []`, `model: kimodo-g1-rp`, `fps: 30`,
+  `diffusion_steps: 100`, `export_preset: rltracker`
+- **constraint channel**: the framework's Root2D constraint is strictly 2-D
+  (`smooth_root_2d[..., [0, 1]]` — height is dropped), so **posture reaches
+  the model only through the text hint** (`_torso_height_hint` in `prompts.py`
+  maps normalized torso → "crouching very low"/"crouching"/"slightly
+  crouching"/none). A `root_y_pos` height channel exists in native Kimodo but
+  is emitted only by the heavy `fullbody` constraint type; the validated
+  configs below do **not** use it.
+
+### `g1_normal_loco.yaml` — baseline grouped config (reference)
+
+The canonical grouped config (`global` + `motion_types:` groups). Sample
+`g1_normal_loco.yaml` with LHS for a mixed-type reference batch (e.g. 200
+samples). It is the structural template for every config below; not a
+distribution-targeted batch.
+
+### `g1_eight_direction_port_008.yaml` — PORT-008 natural recipe
+
+The FRAMEWORK-PORT-008 reproduction of the DISTRIBUTED-007 40-motion envelope
+(5 cells × 8 directions, seed 20260805, 8 s). Native compass, exact prompts,
+separated CFG. User verdict after playback: **"more natural"**. Batch HHOP
+**mean 0.8, 0/40 flagged** (vs native DISTRIBUTED 3.1); per-cell E0 1.4 /
+E1 0.7 / E2 0.8 / E3 1.1 / E4 0.0. Use it to reproduce the PORT-008 evaluation
+envelope exactly.
+
+### `g1_natural_distributed_velocity.yaml` — VELOCITY-DISTRIBUTION-009
+
+Distributes **planar velocity** only: 8 direction groups × 5 LHS speed samples
+over `[0.0, 1.5]` m/s = **40 motions**. Per-speed-band exact prompts track
+stand → slow → walk → brisk → jog. Natural recipe with seed 20260807. Batch
+HHOP **mean 2.79, median 0.00, 26/40 zero** (eval CSV
+`velocity_distribution_eval.csv`); all 10 speed histogram bins over `[0,1.5]`
+populated. Use it when you want a full speed-spectrum velocity distribution in
+all 8 directions with a single fixed torso.
+
+### `g1_natural_distributed_torso_velocity.yaml` — TORSO-HEIGHT-DISTRIBUTION-013
+
+**2-D distribution**: planar velocity `[0.0, 1.5]` m/s **×** torso_height
+`[0.45, 0.8]` (normalized; 0.77 = neutral standing, 0.45 ≈ deep crouch), 8
+direction groups × 8 **2-D LHS** samples = **64 motions**. Seed 20260808.
+`prompt_speed_bands` (same per-speed exact prompts) **+ the torso-hint
+composition**: when the sampled torso is off-neutral, `_torso_height_hint` is
+appended to the band prompt (e.g. `"A person walks forward, crouching very
+low."`); neutral 0.77 configs emit no hint and are byte-identical to
+VELOCITY-009. Batch HHOP **mean 1.04, median 0.00, 56/64 zero**; low-torso band
+(commanded ≤ 0.55) HHOP **0.00 (18/18)**; head_z **min 0.340 m** (no prone
+collapse — the falsifiable test of the old 0.45–0.55 concern is **not**
+reproduced). **Achieved root/pelvis height** (from qpos, normalized) **spreads
+0.352–0.785** with **r = 0.728 vs commanded** — the distribution contract is
+met (not bunched at neutral). Eval CSV `torso_velocity_eval.csv`. Use it when
+you want the velocity AND torso_height both well-distributed.
+
+> Note: achieved heights at the low end (commanded 0.45–0.51) land around
+> 0.35–0.60 — the model crouches from the text hint but does not mechanically
+> hit the commanded value. The spread is real and reproducible; a precise
+> commanded-height mapping would require a `root_y_pos` constraint channel
+> (Path B, PM-reviewed).
+
+---
+
 
 ### Root2D Constraint Settings
 

@@ -1,0 +1,475 @@
+# DATA-KIMODO-FRAMEWORK-PORT-008 — reproduce the DISTRIBUTED-007 40-motion
+# distributed Root2D envelope through the native locomotion_framework.
+#
+# FROZEN DESIGN (see DISTRIBUTED-007 factor_map.md): seed 20260805,
+# 8 s / 240 f / 30 fps / 100 diffusion steps, separated CFG [2.0, 2.0],
+# model kimodo-g1-rp.  Sample names f{cell}_{direction}_s20260805.
+#
+# Geometry parity mechanism (documented in the task design note):
+#   E0 text-only x8 (vel zero -> no Root2D constraint)
+#   E1 straight dense x8 (framework velocity builder, stride 1)
+#   E2 curved stride-8 x8 (constraint_path -> native E2 JSON verbatim; the
+#      framework's arc builder uses a different kinematic model and cannot
+#      reproduce the native turning arcs)
+#   E3 waypoint 3-keyframe x8 (constraint_path -> native E3 JSON verbatim)
+#   E4 straight dense + heading x8 (framework velocity builder + emit_heading
+#      True + heading_deg = native natural-facing angle)
+global:
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 20260805
+  fps: 30
+  output_dir: outputs/framework_port_008_raw
+  sampling_method: uniform
+  export_preset: rltracker
+  cfg_type: separated
+  cfg_weight: [2.0, 2.0]
+  rerank: ""
+motion_types:
+  f0_d00_forward:
+    description: "A person walks forward"
+    prompt: "A person walks forward."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.0, 0.0], vy: [0.0, 0.0], wz: [0.0, 0.0]}
+    num_samples: 1
+    output_name: "f0_d00_forward_s20260805"
+
+  f0_d01_forward_right:
+    description: "A person walks forward to the right"
+    prompt: "A person walks forward to the right."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.0, 0.0], vy: [0.0, 0.0], wz: [0.0, 0.0]}
+    num_samples: 1
+    output_name: "f0_d01_forward_right_s20260805"
+
+  f0_d02_right:
+    description: "A person walks to the right"
+    prompt: "A person walks to the right."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.0, 0.0], vy: [0.0, 0.0], wz: [0.0, 0.0]}
+    num_samples: 1
+    output_name: "f0_d02_right_s20260805"
+
+  f0_d03_backward_right:
+    description: "A person walks backward to the right"
+    prompt: "A person walks backward to the right."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.0, 0.0], vy: [0.0, 0.0], wz: [0.0, 0.0]}
+    num_samples: 1
+    output_name: "f0_d03_backward_right_s20260805"
+
+  f0_d04_backward:
+    description: "A person walks backward"
+    prompt: "A person walks backward."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.0, 0.0], vy: [0.0, 0.0], wz: [0.0, 0.0]}
+    num_samples: 1
+    output_name: "f0_d04_backward_s20260805"
+
+  f0_d05_backward_left:
+    description: "A person walks backward to the left"
+    prompt: "A person walks backward to the left."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.0, 0.0], vy: [0.0, 0.0], wz: [0.0, 0.0]}
+    num_samples: 1
+    output_name: "f0_d05_backward_left_s20260805"
+
+  f0_d06_left:
+    description: "A person walks to the left"
+    prompt: "A person walks to the left."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.0, 0.0], vy: [0.0, 0.0], wz: [0.0, 0.0]}
+    num_samples: 1
+    output_name: "f0_d06_left_s20260805"
+
+  f0_d07_forward_left:
+    description: "A person walks forward to the left"
+    prompt: "A person walks forward to the left."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.0, 0.0], vy: [0.0, 0.0], wz: [0.0, 0.0]}
+    num_samples: 1
+    output_name: "f0_d07_forward_left_s20260805"
+
+  f1_d00_forward:
+    description: "A person walks forward"
+    prompt: "A person walks forward."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.86, 0.86], vy: [0.0, 0.0], wz: [0.0, 0.0]}
+    stride: 1
+    num_samples: 1
+    output_name: "f1_d00_forward_s20260805"
+
+  f1_d01_forward_right:
+    description: "A person walks forward to the right"
+    prompt: "A person walks forward to the right."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.424264, 0.424264], vy: [-0.424264, -0.424264], wz: [0.0, 0.0]}
+    stride: 1
+    num_samples: 1
+    output_name: "f1_d01_forward_right_s20260805"
+
+  f1_d02_right:
+    description: "A person walks to the right"
+    prompt: "A person walks to the right."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.0, 0.0], vy: [-0.45, -0.45], wz: [0.0, 0.0]}
+    stride: 1
+    num_samples: 1
+    output_name: "f1_d02_right_s20260805"
+
+  f1_d03_backward_right:
+    description: "A person walks backward to the right"
+    prompt: "A person walks backward to the right."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [-0.318198, -0.318198], vy: [-0.318198, -0.318198], wz: [0.0, 0.0]}
+    stride: 1
+    num_samples: 1
+    output_name: "f1_d03_backward_right_s20260805"
+
+  f1_d04_backward:
+    description: "A person walks backward"
+    prompt: "A person walks backward."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [-0.5, -0.5], vy: [0.0, 0.0], wz: [0.0, 0.0]}
+    stride: 1
+    num_samples: 1
+    output_name: "f1_d04_backward_s20260805"
+
+  f1_d05_backward_left:
+    description: "A person walks backward to the left"
+    prompt: "A person walks backward to the left."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [-0.318198, -0.318198], vy: [0.318198, 0.318198], wz: [0.0, 0.0]}
+    stride: 1
+    num_samples: 1
+    output_name: "f1_d05_backward_left_s20260805"
+
+  f1_d06_left:
+    description: "A person walks to the left"
+    prompt: "A person walks to the left."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.0, 0.0], vy: [0.45, 0.45], wz: [0.0, 0.0]}
+    stride: 1
+    num_samples: 1
+    output_name: "f1_d06_left_s20260805"
+
+  f1_d07_forward_left:
+    description: "A person walks forward to the left"
+    prompt: "A person walks forward to the left."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.424264, 0.424264], vy: [0.424264, 0.424264], wz: [0.0, 0.0]}
+    stride: 1
+    num_samples: 1
+    output_name: "f1_d07_forward_left_s20260805"
+
+  f2_d00_forward:
+    description: "A person walks forward"
+    prompt: "A person walks forward."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.8, 0.8], vy: [0.0, 0.0], wz: [0.0, 0.0]}  # metadata only
+    constraint_path: ../../../DATA-KIMODO-DISTRIBUTED-007/constraints/E2_d00_forward.constraints.json
+    num_samples: 1
+    output_name: "f2_d00_forward_s20260805"
+
+  f2_d01_forward_right:
+    description: "A person walks forward to the right"
+    prompt: "A person walks forward to the right."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.424264, 0.424264], vy: [-0.424264, -0.424264], wz: [0.0, 0.0]}  # metadata only
+    constraint_path: ../../../DATA-KIMODO-DISTRIBUTED-007/constraints/E2_d01_forward_right.constraints.json
+    num_samples: 1
+    output_name: "f2_d01_forward_right_s20260805"
+
+  f2_d02_right:
+    description: "A person walks to the right"
+    prompt: "A person walks to the right."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.0, 0.0], vy: [-0.45, -0.45], wz: [0.0, 0.0]}  # metadata only
+    constraint_path: ../../../DATA-KIMODO-DISTRIBUTED-007/constraints/E2_d02_right.constraints.json
+    num_samples: 1
+    output_name: "f2_d02_right_s20260805"
+
+  f2_d03_backward_right:
+    description: "A person walks backward to the right"
+    prompt: "A person walks backward to the right."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [-0.318198, -0.318198], vy: [-0.318198, -0.318198], wz: [0.0, 0.0]}  # metadata only
+    constraint_path: ../../../DATA-KIMODO-DISTRIBUTED-007/constraints/E2_d03_backward_right.constraints.json
+    num_samples: 1
+    output_name: "f2_d03_backward_right_s20260805"
+
+  f2_d04_backward:
+    description: "A person walks backward"
+    prompt: "A person walks backward."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [-0.5, -0.5], vy: [0.0, 0.0], wz: [0.0, 0.0]}  # metadata only
+    constraint_path: ../../../DATA-KIMODO-DISTRIBUTED-007/constraints/E2_d04_backward.constraints.json
+    num_samples: 1
+    output_name: "f2_d04_backward_s20260805"
+
+  f2_d05_backward_left:
+    description: "A person walks backward to the left"
+    prompt: "A person walks backward to the left."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [-0.318198, -0.318198], vy: [0.318198, 0.318198], wz: [0.0, 0.0]}  # metadata only
+    constraint_path: ../../../DATA-KIMODO-DISTRIBUTED-007/constraints/E2_d05_backward_left.constraints.json
+    num_samples: 1
+    output_name: "f2_d05_backward_left_s20260805"
+
+  f2_d06_left:
+    description: "A person walks to the left"
+    prompt: "A person walks to the left."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.0, 0.0], vy: [0.45, 0.45], wz: [0.0, 0.0]}  # metadata only
+    constraint_path: ../../../DATA-KIMODO-DISTRIBUTED-007/constraints/E2_d06_left.constraints.json
+    num_samples: 1
+    output_name: "f2_d06_left_s20260805"
+
+  f2_d07_forward_left:
+    description: "A person walks forward to the left"
+    prompt: "A person walks forward to the left."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.424264, 0.424264], vy: [0.424264, 0.424264], wz: [0.0, 0.0]}  # metadata only
+    constraint_path: ../../../DATA-KIMODO-DISTRIBUTED-007/constraints/E2_d07_forward_left.constraints.json
+    num_samples: 1
+    output_name: "f2_d07_forward_left_s20260805"
+
+  f3_d00_forward:
+    description: "A person walks forward"
+    prompt: "A person walks forward."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.86, 0.86], vy: [0.0, 0.0], wz: [0.0, 0.0]}  # metadata only
+    constraint_path: ../../../DATA-KIMODO-DISTRIBUTED-007/constraints/E3_d00_forward.constraints.json
+    num_samples: 1
+    output_name: "f3_d00_forward_s20260805"
+
+  f3_d01_forward_right:
+    description: "A person walks forward to the right"
+    prompt: "A person walks forward to the right."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.424264, 0.424264], vy: [-0.424264, -0.424264], wz: [0.0, 0.0]}  # metadata only
+    constraint_path: ../../../DATA-KIMODO-DISTRIBUTED-007/constraints/E3_d01_forward_right.constraints.json
+    num_samples: 1
+    output_name: "f3_d01_forward_right_s20260805"
+
+  f3_d02_right:
+    description: "A person walks to the right"
+    prompt: "A person walks to the right."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.0, 0.0], vy: [-0.45, -0.45], wz: [0.0, 0.0]}  # metadata only
+    constraint_path: ../../../DATA-KIMODO-DISTRIBUTED-007/constraints/E3_d02_right.constraints.json
+    num_samples: 1
+    output_name: "f3_d02_right_s20260805"
+
+  f3_d03_backward_right:
+    description: "A person walks backward to the right"
+    prompt: "A person walks backward to the right."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [-0.318198, -0.318198], vy: [-0.318198, -0.318198], wz: [0.0, 0.0]}  # metadata only
+    constraint_path: ../../../DATA-KIMODO-DISTRIBUTED-007/constraints/E3_d03_backward_right.constraints.json
+    num_samples: 1
+    output_name: "f3_d03_backward_right_s20260805"
+
+  f3_d04_backward:
+    description: "A person walks backward"
+    prompt: "A person walks backward."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [-0.5, -0.5], vy: [0.0, 0.0], wz: [0.0, 0.0]}  # metadata only
+    constraint_path: ../../../DATA-KIMODO-DISTRIBUTED-007/constraints/E3_d04_backward.constraints.json
+    num_samples: 1
+    output_name: "f3_d04_backward_s20260805"
+
+  f3_d05_backward_left:
+    description: "A person walks backward to the left"
+    prompt: "A person walks backward to the left."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [-0.318198, -0.318198], vy: [0.318198, 0.318198], wz: [0.0, 0.0]}  # metadata only
+    constraint_path: ../../../DATA-KIMODO-DISTRIBUTED-007/constraints/E3_d05_backward_left.constraints.json
+    num_samples: 1
+    output_name: "f3_d05_backward_left_s20260805"
+
+  f3_d06_left:
+    description: "A person walks to the left"
+    prompt: "A person walks to the left."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.0, 0.0], vy: [0.45, 0.45], wz: [0.0, 0.0]}  # metadata only
+    constraint_path: ../../../DATA-KIMODO-DISTRIBUTED-007/constraints/E3_d06_left.constraints.json
+    num_samples: 1
+    output_name: "f3_d06_left_s20260805"
+
+  f3_d07_forward_left:
+    description: "A person walks forward to the left"
+    prompt: "A person walks forward to the left."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.424264, 0.424264], vy: [0.424264, 0.424264], wz: [0.0, 0.0]}  # metadata only
+    constraint_path: ../../../DATA-KIMODO-DISTRIBUTED-007/constraints/E3_d07_forward_left.constraints.json
+    num_samples: 1
+    output_name: "f3_d07_forward_left_s20260805"
+
+  f4_d00_forward:
+    description: "A person walks forward"
+    prompt: "A person walks forward."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.86, 0.86], vy: [0.0, 0.0], wz: [0.0, 0.0]}
+    stride: 1
+    heading_deg: 0.0
+    emit_heading: true
+    num_samples: 1
+    output_name: "f4_d00_forward_s20260805"
+
+  f4_d01_forward_right:
+    description: "A person walks forward to the right"
+    prompt: "A person walks forward to the right."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.424264, 0.424264], vy: [-0.424264, -0.424264], wz: [0.0, 0.0]}
+    stride: 1
+    heading_deg: -45.0
+    emit_heading: true
+    num_samples: 1
+    output_name: "f4_d01_forward_right_s20260805"
+
+  f4_d02_right:
+    description: "A person walks to the right"
+    prompt: "A person walks to the right."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.0, 0.0], vy: [-0.45, -0.45], wz: [0.0, 0.0]}
+    stride: 1
+    heading_deg: 0.0
+    emit_heading: true
+    num_samples: 1
+    output_name: "f4_d02_right_s20260805"
+
+  f4_d03_backward_right:
+    description: "A person walks backward to the right"
+    prompt: "A person walks backward to the right."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [-0.318198, -0.318198], vy: [-0.318198, -0.318198], wz: [0.0, 0.0]}
+    stride: 1
+    heading_deg: -135.0
+    emit_heading: true
+    num_samples: 1
+    output_name: "f4_d03_backward_right_s20260805"
+
+  f4_d04_backward:
+    description: "A person walks backward"
+    prompt: "A person walks backward."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [-0.5, -0.5], vy: [0.0, 0.0], wz: [0.0, 0.0]}
+    stride: 1
+    heading_deg: 180.0
+    emit_heading: true
+    num_samples: 1
+    output_name: "f4_d04_backward_s20260805"
+
+  f4_d05_backward_left:
+    description: "A person walks backward to the left"
+    prompt: "A person walks backward to the left."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [-0.318198, -0.318198], vy: [0.318198, 0.318198], wz: [0.0, 0.0]}
+    stride: 1
+    heading_deg: 135.0
+    emit_heading: true
+    num_samples: 1
+    output_name: "f4_d05_backward_left_s20260805"
+
+  f4_d06_left:
+    description: "A person walks to the left"
+    prompt: "A person walks to the left."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.0, 0.0], vy: [0.45, 0.45], wz: [0.0, 0.0]}
+    stride: 1
+    heading_deg: 0.0
+    emit_heading: true
+    num_samples: 1
+    output_name: "f4_d06_left_s20260805"
+
+  f4_d07_forward_left:
+    description: "A person walks forward to the left"
+    prompt: "A person walks forward to the left."
+    duration: [8.0, 8.0]
+    styles: []
+    torso_height: [0.77, 0.77]
+    vel_cmd: {vx: [0.424264, 0.424264], vy: [0.424264, 0.424264], wz: [0.0, 0.0]}
+    stride: 1
+    heading_deg: 45.0
+    emit_heading: true
+    num_samples: 1
+    output_name: "f4_d07_forward_left_s20260805"

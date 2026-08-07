@@ -73,8 +73,11 @@ def _save_manifest(csv_path: Path, all_samples: list[SampledMotion],
         ])
         for i, s in enumerate(all_samples):
             if preset == "rltracker":
-                from .export_presets.rltracker import build_motion_name
-                name = build_motion_name(s.motion_type, s.vel, i, seed)
+                if getattr(s, "output_name", None):
+                    name = s.output_name
+                else:
+                    from .export_presets.rltracker import build_motion_name
+                    name = build_motion_name(s.motion_type, s.vel, i, seed)
                 path_str = f"{name}/motion.npz"
             else:
                 path_str = f"{s.motion_type}/{s.motion_type}_{i:04d}.npz"
@@ -278,11 +281,16 @@ def _generate_batch(
     kimodo_constraints = per_kimodo_constraints  # list[list]
 
     # ── Generate: list API → each sample gets its own prompt + constraint ──
+    # CFG passed explicitly for parity with native generation
+    # (``--cfg_type separated --cfg_weight 2.0 2.0``). The model default is the
+    # same separated [2.0, 2.0], but the config now controls it.
     output = model(
         per_prompts,               # list[str] → num_samples = len(prompts)
         per_frames,                # list[int] → per-sample durations
         constraint_lst=kimodo_constraints,  # list[list] → per-sample
         num_denoising_steps=samples[0].diffusion_steps,
+        cfg_type=config.global_.cfg_type,
+        cfg_weight=list(config.global_.cfg_weight),
         return_numpy=True,
     )
 
@@ -443,6 +451,7 @@ def _export_rltracker(
         style=sample.style,
         seed=seed,
         output_base=output_base,
+        output_name=getattr(sample, "output_name", None),
     )
 
 

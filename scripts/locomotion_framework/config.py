@@ -33,6 +33,33 @@ class MotionSpec:
     weight: float = 1.0                    # relative sampling probability
     num_samples: int = 10                  # how many motions from this type
     diffusion_steps: int = 100
+    # ── Distributed-Root2D extensions (DATA-KIMODO-FRAMEWORK-PORT-008) ──
+    # All optional and backward-compatible: default None keeps the previous
+    # velocity-only behaviour.
+    prompt: Optional[str] = None          # exact prompt override (used verbatim,
+                                          #   skipping style/torso/speed hints)
+    heading_deg: Optional[float] = None   # initial world heading for arc paths
+                                          #   (converted to radians internally)
+    stride: Optional[int] = None          # Root2D keyframe stride (1 = dense,
+                                          #   8 = sparse). None = framework default 1.
+    keyframes: Optional[list] = None      # explicit waypoints as [[frame, x, z], ...]
+                                          #   (native x +left, z +forward). None = off.
+    constraint_path: Optional[str] = None # path to a DISTRIBUTED-007-style Root2D
+                                          #   constraint JSON (list of dicts). When set,
+                                          #   the exact frame_indices/smooth_root_2d/
+                                          #   global_root_heading are loaded verbatim.
+    emit_heading: Optional[bool] = None   # global_root_heading emission control:
+                                          #   True = emit (straight paths use the
+                                          #     constant ``heading_deg``; arcs the
+                                          #     rotating heading),
+                                          #   False = never emit,
+                                          #   None = default (straight: none;
+                                          #     arc: emitted — original behaviour).
+    output_name: Optional[str] = None     # exact output directory/name for this motion
+                                          #   (overrides the rltracker build_motion_name)
+    speed_hint: bool = True               # append the "at a brisk pace"/"slowly" hint
+                                          #   from vel magnitude (False for exact-prompt
+                                          #   parity batches)
 
 
 @dataclass
@@ -49,6 +76,9 @@ class GlobalConfig:
     generate_margin: float = 0.0      # DEPRECATED: demo method uses exact duration, no margin
     rerank: str = ""                  # sort samples before generation: "vx", "vy", "wz",
                                       #   "speed" (|v|), "torso", "duration", or "" (no sort)
+    cfg_type: str = "separated"       # CFG strategy passed to the kimodo model call
+                                      #   ("nocfg", "regular", or "separated")
+    cfg_weight: tuple[float, float] = (2.0, 2.0)  # separated (text, constraint) CFG weights
 
 
 @dataclass
@@ -91,7 +121,20 @@ def load_config(path: str | Path) -> LocomotionConfig:
         export_preset=global_raw.get("export_preset", "kimodo"),
         generate_margin=global_raw.get("generate_margin", 2.0),
         rerank=global_raw.get("rerank", ""),
+        cfg_type=global_raw.get("cfg_type", "separated"),
+        cfg_weight=tuple(global_raw.get("cfg_weight", [2.0, 2.0])),
     )
+
+    config_dir = Path(path).resolve().parent
+
+    def _resolve_constraint_path(cp: Optional[str]) -> Optional[str]:
+        """Resolve a relative constraint_path against the config file's dir."""
+        if cp is None:
+            return None
+        p = Path(cp)
+        if p.is_absolute():
+            return str(p)
+        return str((config_dir / p).resolve())
 
     motion_types = {}
     for name, spec_raw in raw.get("motion_types", {}).items():
@@ -105,6 +148,14 @@ def load_config(path: str | Path) -> LocomotionConfig:
             weight=spec_raw.get("weight", 1.0),
             num_samples=spec_raw.get("num_samples", 10),
             diffusion_steps=spec_raw.get("diffusion_steps", global_config.diffusion_steps),
+            prompt=spec_raw.get("prompt"),
+            heading_deg=spec_raw.get("heading_deg"),
+            stride=spec_raw.get("stride"),
+            keyframes=spec_raw.get("keyframes"),
+            constraint_path=_resolve_constraint_path(spec_raw.get("constraint_path")),
+            emit_heading=spec_raw.get("emit_heading"),
+            output_name=spec_raw.get("output_name"),
+            speed_hint=spec_raw.get("speed_hint", True),
         )
         motion_types[name] = spec
 

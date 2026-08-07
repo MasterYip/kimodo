@@ -11,6 +11,7 @@ from typing import Optional
 import numpy as np
 
 from .config import LocomotionConfig, MotionSpec
+from .prompts import build_motion_prompt
 
 
 @dataclass
@@ -23,6 +24,47 @@ class SampledMotion:
     torso_height: float       # normalized
     style: str
     diffusion_steps: int
+    # ── Distributed-Root2D extensions (DATA-KIMODO-FRAMEWORK-PORT-008) ──
+    heading_deg: Optional[float] = None
+    stride: Optional[int] = None
+    keyframes: Optional[list] = None
+    constraint_path: Optional[str] = None
+    emit_heading: Optional[bool] = None
+    output_name: Optional[str] = None
+    speed_hint: bool = True
+
+
+def _prompt_for_spec(spec: MotionSpec, style: str, torso_height: float,
+                     vel: dict[str, float]) -> str:
+    """Build the final prompt for a spec.
+
+    If the spec declares an exact ``prompt`` override it is used verbatim
+    (normalised to end with a single period).  Otherwise the description is
+    composed with style/torso/speed hints (speed hint suppressed when
+    ``spec.speed_hint`` is False).
+    """
+    if spec.prompt:
+        return spec.prompt.rstrip(".") + "."
+    return build_motion_prompt(
+        spec.description,
+        style,
+        torso_height=torso_height if spec.name != "stand" else None,
+        vel=vel,
+        speed_hint=spec.speed_hint,
+    )
+
+
+def _extra_kwargs(spec: MotionSpec) -> dict:
+    """Return the Distributed-Root2D extension kwargs copied from a spec."""
+    return dict(
+        heading_deg=spec.heading_deg,
+        stride=spec.stride,
+        keyframes=spec.keyframes,
+        constraint_path=spec.constraint_path,
+        emit_heading=spec.emit_heading,
+        output_name=spec.output_name,
+        speed_hint=spec.speed_hint,
+    )
 
 
 def _sort_key_for(sample: SampledMotion, by: str) -> float:
@@ -106,8 +148,6 @@ def _lhs_sample_from_spec(
     rng: np.random.RandomState, spec: MotionSpec
 ) -> list[SampledMotion]:
     """Generate ``spec.num_samples`` motions with LHS over the spec's ranges."""
-    from .prompts import build_motion_prompt
-
     n = spec.num_samples
     ranges = _spec_param_ranges(spec)
     lhs_values = lhs_sample(rng, ranges, n)
@@ -127,12 +167,7 @@ def _lhs_sample_from_spec(
 
         style = spec.styles[rng.randint(len(spec.styles))] if spec.styles else ""
 
-        prompt = build_motion_prompt(
-            spec.description,
-            style,
-            torso_height=torso_height if spec.name != "stand" else None,
-            vel=vel,
-        )
+        prompt = _prompt_for_spec(spec, style, torso_height, vel)
 
         samples.append(SampledMotion(
             motion_type=spec.name,
@@ -142,6 +177,7 @@ def _lhs_sample_from_spec(
             torso_height=torso_height,
             style=style,
             diffusion_steps=spec.diffusion_steps,
+            **_extra_kwargs(spec),
         ))
 
     return samples
@@ -158,8 +194,6 @@ class MotionSampler:
 
     def sample_params(self, spec: MotionSpec) -> SampledMotion:
         """Sample one motion from a specific MotionSpec distribution (uniform)."""
-        from .prompts import build_motion_prompt
-
         duration = self.rng.uniform(*spec.duration_range)
         style = spec.styles[self.rng.randint(len(spec.styles))] if spec.styles else ""
 
@@ -169,11 +203,7 @@ class MotionSampler:
 
         torso_height = self.rng.uniform(*spec.torso_height_range)
 
-        prompt = build_motion_prompt(
-            spec.description,
-            style,
-            torso_height=torso_height if spec.name != "stand" else None,
-        )
+        prompt = _prompt_for_spec(spec, style, torso_height, vel)
 
         return SampledMotion(
             motion_type=spec.name,
@@ -183,6 +213,7 @@ class MotionSampler:
             torso_height=torso_height,
             style=style,
             diffusion_steps=spec.diffusion_steps,
+            **_extra_kwargs(spec),
         )
 
     def sample_weighted_type(self) -> MotionSpec:
@@ -257,6 +288,8 @@ class MotionSampler:
                     weight=spec.weight,
                     num_samples=n,
                     diffusion_steps=spec.diffusion_steps,
+                    prompt=spec.prompt,
+                    **_extra_kwargs(spec),
                 )
                 results.extend(_lhs_sample_from_spec(self.rng, spec_copy))
 

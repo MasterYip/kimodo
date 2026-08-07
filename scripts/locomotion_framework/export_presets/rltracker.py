@@ -504,12 +504,19 @@ class RLTrackerExporter:
         style: str,
         seed: int,
         output_base: Path,
+        output_name: str | None = None,
     ) -> Path:
         """Export one Kimodo-generated motion to RLTracker format.
 
+        Args:
+            output_name: Exact directory name override. When set, the output
+                directory is ``output_base / output_name`` instead of the
+                generated ``build_motion_name(...)`` name. Used by exact-sample
+                name batches (DATA-KIMODO-FRAMEWORK-PORT-008).
+
         Returns the output directory path.
         """
-        name = build_motion_name(motion_type, vel, sample_idx, seed)
+        name = output_name or build_motion_name(motion_type, vel, sample_idx, seed)
         out_dir = output_base / name
         out_dir.mkdir(parents=True, exist_ok=True)
 

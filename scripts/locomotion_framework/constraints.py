@@ -13,6 +13,7 @@ following the overall trajectory.
 """
 
 import numpy as np
+from pathlib import Path
 
 from .sampler import SampledMotion
 
@@ -29,6 +30,7 @@ def build_root2d_constraint(
     fps: int = 30,
     heading: float = 0.0,
     stride: int = _CONSTRAINT_STRIDE,
+    emit_heading: bool | None = None,
 ) -> dict:
     """Build a Root2D constraint from a velocity command.
 
@@ -42,6 +44,11 @@ def build_root2d_constraint(
         fps:      frames per second.
         heading:  initial world heading (radians).
         stride:   constrain every ``stride``-th frame (1 = all frames).
+        emit_heading: ``global_root_heading`` emission control.
+            - True  → always emit (straight paths use the constant ``heading``;
+                      arcs use the rotating ``heading + wz·t``).
+            - False → never emit.
+            - None  → original behaviour (straight paths: none; arcs: emit).
     """
     num_frames = int(duration * fps)
     dt = 1.0 / fps
@@ -59,7 +66,13 @@ def build_root2d_constraint(
         # Kimodo Z = forward  (world) ← vx  (body forward)
         x = vy * t
         z = vx * t
-        headings = None
+        if emit_heading is True:
+            headings = np.stack(
+                [np.cos(heading), np.sin(heading)], axis=-1
+            ).astype(np.float32)
+            headings = np.tile(headings, (num_frames, 1))
+        else:
+            headings = None
     else:
         # Curved path.
         # Body-frame velocity (vx, vy) rotates at rate wz.
@@ -79,11 +92,14 @@ def build_root2d_constraint(
         x = np.cumsum(v_X) * dt
         z = np.cumsum(v_Z) * dt
 
-        # Global root heading per frame
-        frame_headings = heading + wz * t
-        headings = np.stack(
-            [np.cos(frame_headings), np.sin(frame_headings)], axis=-1
-        ).astype(np.float32)
+        # Global root heading per frame (suppressed when emit_heading is False)
+        if emit_heading is not False:
+            frame_headings = heading + wz * t
+            headings = np.stack(
+                [np.cos(frame_headings), np.sin(frame_headings)], axis=-1
+            ).astype(np.float32)
+        else:
+            headings = None
 
     # ── Frame selection ─────────────────────────────────────────
     stride = max(1, stride)
@@ -110,6 +126,80 @@ def build_root2d_constraint(
     return constraint
 
 
+def build_keyframe_constraint(
+    frame_indices: list[int],
+    smooth_root_2d: list[list[float]],
+    headings: list[list[float]] | None = None,
+) -> dict:
+    """Build a Root2D constraint dict from explicit keyframes/waypoints.
+
+    This is the low-level builder behind the config-level ``keyframes`` and
+    ``constraint_path`` mechanisms (DATA-KIMODO-FRAMEWORK-PORT-008).  The
+    values are taken verbatim — the caller is responsible for the native
+    coordinate convention (x +left, z +forward).
+
+    Args:
+        frame_indices: Sorted, unique frame indices within ``[0, num_frames)``.
+        smooth_root_2d: ``K`` native ``[x, z]`` waypoints (one per frame index).
+        headings: Optional ``K`` ``[cos, sin]`` heading vectors. If ``None`` no
+            ``global_root_heading`` is emitted.
+    """
+    n = len(frame_indices)
+    if len(smooth_root_2d) != n:
+        raise ValueError("smooth_root_2d length must match frame_indices")
+    if headings is not None and len(headings) != n:
+        raise ValueError("global_root_heading length must match frame_indices")
+    constraint: dict = {
+        "type": "root2d",
+        "frame_indices": [int(i) for i in frame_indices],
+        "smooth_root_2d": [[float(x), float(z)] for x, z in smooth_root_2d],
+    }
+    if headings is not None:
+        constraint["global_root_heading"] = [
+            [float(c), float(s)] for c, s in headings
+        ]
+    return constraint
+
+
+def load_constraint_path(path: str | Path) -> list[dict]:
+    """Load a DISTRIBUTED-007-style Root2D constraint JSON verbatim.
+
+    The file is a JSON list of constraint dicts, each with ``type: root2d``,
+    ``frame_indices``, ``smooth_root_2d`` and optionally ``global_root_heading``
+    (the same schema written by ``DATA-KIMODO-DISTRIBUTED-007/
+    generate_constraints.py`` and consumed by ``kimodo --constraints``).
+    Loading verbatim guarantees exact geometry parity with the native batch.
+
+    Args:
+        path: Path to the JSON file.
+    """
+    import json
+
+    with open(path) as f:
+        raw = json.load(f)
+    if not isinstance(raw, list) or not raw:
+        raise ValueError(f"constraint path {path}: expected a non-empty JSON list")
+    out = []
+    for c in raw:
+        if not isinstance(c, dict) or c.get("type") != "root2d":
+            raise ValueError(f"constraint path {path}: only root2d constraints supported")
+        fi = c["frame_indices"]
+        sr = c["smooth_root_2d"]
+        if len(fi) != len(sr):
+            raise ValueError(f"constraint path {path}: frame_indices/smooth_root_2d length mismatch")
+        entry: dict = {
+            "type": "root2d",
+            "frame_indices": [int(i) for i in fi],
+            "smooth_root_2d": [[float(x), float(z)] for x, z in sr],
+        }
+        if "global_root_heading" in c:
+            entry["global_root_heading"] = [
+                [float(cx), float(sy)] for cx, sy in c["global_root_heading"]
+            ]
+        out.append(entry)
+    return out
+
+
 def build_constraints_json(
     sample: SampledMotion,
     fps: int = 30,
@@ -118,22 +208,50 @@ def build_constraints_json(
 ) -> list[dict]:
     """Build the full constraints list for a sampled motion.
 
+    Resolution order (first match wins):
+      1. ``sample.constraint_path``  — load the DISTRIBUTED-007 constraint JSON
+         verbatim (exact geometry parity).
+      2. ``sample.keyframes``        — explicit ``[[frame, x, z], ...]`` waypoints.
+      3. velocity path               — ``build_root2d_constraint`` from
+         ``sample.vel``, honouring ``sample.heading_deg`` / ``sample.stride`` /
+         ``sample.emit_heading``.
+
     Args:
         sample:            The sampled motion spec.
         fps:               Frames per second.
         duration_override: If set, build constraints for this duration
                            instead of ``sample.duration`` (used for
                            generate-and-truncate mode).
-        stride:            Override constraint stride (None = use default).
-                           stride=1 for dense, stride=3+ for sparse.
+        stride:            Override constraint stride (None = use sample.stride,
+                           then the framework default 1).
     """
+    # 1. Exact constraint file.
+    if sample.constraint_path:
+        return load_constraint_path(sample.constraint_path)
+
+    # 2. Explicit waypoints.
+    if sample.keyframes:
+        fi = [int(k[0]) for k in sample.keyframes]
+        sr = [[float(k[1]), float(k[2])] for k in sample.keyframes]
+        return [build_keyframe_constraint(fi, sr)]
+
+    # 3. Velocity-derived path.
     constraints = []
     duration = duration_override if duration_override is not None else sample.duration
-    kw = {"stride": stride} if stride is not None else {}
+    if stride is None:
+        stride = sample.stride if sample.stride is not None else _CONSTRAINT_STRIDE
+    heading_rad = (
+        np.radians(sample.heading_deg) if sample.heading_deg is not None else 0.0
+    )
 
     if sample.vel and any(abs(v) > 1e-6 for v in sample.vel.values()):
         root_constraint = build_root2d_constraint(
-            sample.vel, duration, fps=fps, **kw
+            sample.vel,
+            duration,
+            fps=fps,
+            heading=heading_rad,
+            stride=stride,
+            emit_heading=sample.emit_heading,
         )
         constraints.append(root_constraint)
 

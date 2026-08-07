@@ -4,6 +4,7 @@
 import argparse
 import os
 import shutil
+import tempfile
 from typing import Any, Dict, Optional
 
 import torch
@@ -67,6 +68,17 @@ def parse_args():
         type=str,
         default="output",
         help="Output stem name: with one sample writes a single file per format (e.g. test.npz, test.csv); with multiple samples creates a folder and writes test_00.npz, test_01.npz, ... inside it. Used for NPZ, AMASS NPZ, CSV, and BVH.",
+    )
+    parser.add_argument(
+        "--tmp_dir",
+        type=str,
+        default=None,
+        help=(
+            "Directory for process temp/cache writes (TMPDIR, torchinductor, matplotlib, CUDA). "
+            "Defaults to the ambient environment (scripts/env.sh). Use a path on a filesystem "
+            "with free space (e.g. /data/.../.cache/tmp on hosts whose root FS '/' is full); "
+            "a full /tmp hangs any subprocess that writes to it."
+        ),
     )
     parser.add_argument(
         "--save_example_dir",
@@ -273,11 +285,39 @@ def get_generation_inputs(args, fps: float):
     }
 
 
+def configure_tmp_dir(tmp_dir: Optional[str]) -> Optional[str]:
+    """Redirect process temp/cache writes under ``tmp_dir`` (created if needed).
+
+    Explicit ``--tmp_dir`` wins; otherwise the ambient environment (e.g.
+    ``scripts/env.sh``) decides. Returns the effective temp dir, or None when the
+    flag was not given. Redirections cover python tempfile (bvh export, loco
+    editor), torch.compile/torchinductor, matplotlib, and the CUDA cache.
+    """
+    if not tmp_dir:
+        return None
+    tmp_dir = os.path.abspath(tmp_dir)
+    os.makedirs(tmp_dir, exist_ok=True)
+    for var in ("TMPDIR", "TMP", "TEMP"):
+        os.environ[var] = tmp_dir
+    tempfile.tempdir = tmp_dir
+    os.environ["TORCHINDUCTOR_CACHE_DIR"] = os.path.join(tmp_dir, "torchinductor")
+    os.environ["XDG_CACHE_HOME"] = os.path.join(tmp_dir, "xdg")
+    os.environ["MPLCONFIGDIR"] = os.path.join(tmp_dir, "matplotlib")
+    os.environ["CUDA_CACHE_PATH"] = os.path.join(tmp_dir, "cuda")
+    for sub in ("torchinductor", "xdg", "matplotlib", "cuda"):
+        os.makedirs(os.path.join(tmp_dir, sub), exist_ok=True)
+    return tmp_dir
+
+
 def main():
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
 
     args = parse_args()
+
+    tmp_dir = configure_tmp_dir(args.tmp_dir)
+    if tmp_dir:
+        print(f"[kimodo] redirecting temp/cache writes to {tmp_dir}")
 
     # Load model (resolution of name done inside load_model)
     model, resolved_model = load_model(

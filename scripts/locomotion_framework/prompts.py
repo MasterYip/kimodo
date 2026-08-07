@@ -44,15 +44,27 @@ def build_motion_prompt(
     style: str = "",
     torso_height: Optional[float] = None,
     vel: Optional[dict[str, float]] = None,
+    speed_hint: bool = True,
 ) -> str:
-    """Compose a text prompt for Kimodo from sampled parameters."""
+    """Compose a text prompt for Kimodo from sampled parameters.
+
+    Args:
+        description: Base motion description (e.g. "A person walks forward").
+        style: Style modifier (e.g. "casually"); empty string omits it.
+        torso_height: Normalized height; maps to a crouch/tall hint.
+        vel: Velocity command dict (vx/vy/wz); used only for the speed hint.
+        speed_hint: When False, suppress the velocity-magnitude hint
+            ("slowly"/"at a brisk pace"/...). Used for exact-prompt parity
+            batches where ``description`` is already the final prompt.
+    """
     prefix = ""
     suffix_parts = []
 
     # Add speed hint
-    speed = _speed_hint(vel)
-    if speed:
-        suffix_parts.append(speed)
+    if speed_hint:
+        speed = _speed_hint(vel)
+        if speed:
+            suffix_parts.append(speed)
 
     # Add style
     if style.strip():

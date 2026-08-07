@@ -1,5 +1,6 @@
 """Motion specification dataclasses and YAML config loading."""
 
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -14,11 +15,42 @@ class VelRange:
     max: float
 
     def sample(self, rng) -> float:
-        return rng.uniform(self.min, self.max)
+        return float(rng.uniform(self.min, self.max))
 
     @classmethod
     def from_list(cls, lst: list[float]) -> "VelRange":
-        return cls(min=float(lst[0]), max=float(lst[1]))
+        if not isinstance(lst, (list, tuple)) or len(lst) != 2:
+            raise ValueError("velocity ranges must be two-element [min, max] lists")
+        low, high = float(lst[0]), float(lst[1])
+        if not math.isfinite(low) or not math.isfinite(high):
+            raise ValueError("velocity range bounds must be finite")
+        if low > high:
+            raise ValueError(f"velocity range min {low} exceeds max {high}")
+        return cls(min=low, max=high)
+
+
+@dataclass
+class PolarVelRange:
+    """Planar speed and direction ranges.
+
+    ``direction_deg`` is the **native compass** convention used throughout
+    the framework: 0 deg = +forward, +90 deg = +left, -90 deg = +right,
+    180 deg = backward.  This matches the PORT-008 verified sign convention
+    (vx = speed*cos(theta), vy = speed*sin(theta), theta measured from
+    +forward toward +left) and is verified empirically from generated qpos
+    (see DATA-KIMODO-VELOCITY-DISTRIBUTION-009 design note).  Note this is
+    intentionally opposite to the earlier framework README comment
+    ("+90 = right"), which was the Y30 lateral-sign defect.
+    """
+
+    speed: VelRange
+    direction_deg: VelRange
+
+    def __post_init__(self) -> None:
+        if self.speed.min < 0.0:
+            raise ValueError("polar speed range must be non-negative")
+        if self.direction_deg.max - self.direction_deg.min > 360.0:
+            raise ValueError("polar direction range must span at most 360 degrees")
 
 
 @dataclass
@@ -33,6 +65,10 @@ class MotionSpec:
     weight: float = 1.0                    # relative sampling probability
     num_samples: int = 10                  # how many motions from this type
     diffusion_steps: int = 100
+    # ── Polar velocity (DATA-KIMODO-POLAR-DISTRIBUTION-006 / this task) ──
+    # ``vel_cmd.polar`` is mutually exclusive with Cartesian ``vx``/``vy``.
+    # ``wz`` remains independent and may be combined with either form.
+    polar_vel_cmd: Optional[PolarVelRange] = None
     # ── Distributed-Root2D extensions (DATA-KIMODO-FRAMEWORK-PORT-008) ──
     # All optional and backward-compatible: default None keeps the previous
     # velocity-only behaviour.
@@ -60,6 +96,14 @@ class MotionSpec:
     speed_hint: bool = True               # append the "at a brisk pace"/"slowly" hint
                                           #   from vel magnitude (False for exact-prompt
                                           #   parity batches)
+    # ── Per-speed-band exact prompts (DATA-KIMODO-VELOCITY-DISTRIBUTION-009) ──
+    # Optional list of ``[max_speed_mps, prompt_string]`` sorted ascending by
+    # max_speed.  When set, the sampler selects the first band whose
+    # ``max_speed`` is strictly above the sampled planar speed and uses that
+    # exact prompt (no style/torso/speed hints).  This lets a single direction
+    # group track the whole speed spectrum (stand -> walk -> jog) with clean
+    # per-speed prompts instead of one fixed sentence.
+    prompt_speed_bands: Optional[list] = None
 
 
 @dataclass
@@ -90,11 +134,65 @@ class LocomotionConfig:
 
 def _parse_vel_cmd(raw: dict) -> dict[str, VelRange]:
     """Parse raw velocity command dict from YAML into VelRange objects."""
+    if not isinstance(raw, dict):
+        raise ValueError("vel_cmd must be a mapping")
+    if "polar" in raw and any(key in raw for key in ("vx", "vy")):
+        raise ValueError("vel_cmd.polar cannot be combined with Cartesian vx/vy")
     parsed = {}
     for key in ("vx", "vy", "wz"):
         if key in raw:
             parsed[key] = VelRange.from_list(raw[key])
     return parsed
+
+
+def _parse_polar_vel_cmd(raw: dict) -> Optional[PolarVelRange]:
+    """Parse optional polar planar velocity ranges."""
+    polar_raw = raw.get("polar")
+    if polar_raw is None:
+        return None
+    if not isinstance(polar_raw, dict):
+        raise ValueError("vel_cmd.polar must be a mapping")
+    missing = {"speed", "direction_deg"} - set(polar_raw)
+    if missing:
+        raise ValueError(
+            "vel_cmd.polar is missing required field(s): " + ", ".join(sorted(missing))
+        )
+    unknown = set(polar_raw) - {"speed", "direction_deg"}
+    if unknown:
+        raise ValueError(
+            "unknown vel_cmd.polar field(s): " + ", ".join(sorted(unknown))
+        )
+    return PolarVelRange(
+        speed=VelRange.from_list(polar_raw["speed"]),
+        direction_deg=VelRange.from_list(polar_raw["direction_deg"]),
+    )
+
+
+def _parse_prompt_speed_bands(raw: Optional[list]) -> Optional[list]:
+    """Validate the optional per-speed-band exact-prompt table.
+
+    Each entry must be ``[max_speed_mps, prompt]`` with ascending max_speed.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or not raw:
+        raise ValueError("prompt_speed_bands must be a non-empty list")
+    out = []
+    prev = None
+    for entry in raw:
+        if not isinstance(entry, (list, tuple)) or len(entry) != 2:
+            raise ValueError("each prompt_speed_bands entry must be [max_speed, prompt]")
+        max_speed, prompt = entry
+        max_speed = float(max_speed)
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise ValueError("prompt_speed_bands prompt must be a non-empty string")
+        if max_speed <= 0.0:
+            raise ValueError("prompt_speed_bands max_speed must be positive")
+        if prev is not None and max_speed <= prev:
+            raise ValueError("prompt_speed_bands max_speed must be strictly ascending")
+        prev = max_speed
+        out.append((max_speed, prompt.strip()))
+    return out
 
 
 def load_config(path: str | Path) -> LocomotionConfig:
@@ -138,17 +236,28 @@ def load_config(path: str | Path) -> LocomotionConfig:
 
     motion_types = {}
     for name, spec_raw in raw.get("motion_types", {}).items():
+        vel_raw = spec_raw.get("vel_cmd", {})
+        # `prompt` is the canonical exact-prompt field; `prompt_override`
+        # (older lineage) is accepted as an alias for backward compatibility.
+        prompt = spec_raw.get("prompt")
+        if prompt is None:
+            prompt = spec_raw.get("prompt_override")
+        if prompt is not None and (
+            not isinstance(prompt, str) or not prompt.strip()
+        ):
+            raise ValueError(f"motion_types.{name}.prompt must be a non-empty string")
         spec = MotionSpec(
             name=name,
             description=spec_raw["description"],
             duration_range=tuple(spec_raw["duration"]),
-            vel_cmd=_parse_vel_cmd(spec_raw.get("vel_cmd", {})),
+            vel_cmd=_parse_vel_cmd(vel_raw),
             torso_height_range=tuple(spec_raw["torso_height"]),
             styles=spec_raw.get("styles", []),
             weight=spec_raw.get("weight", 1.0),
             num_samples=spec_raw.get("num_samples", 10),
             diffusion_steps=spec_raw.get("diffusion_steps", global_config.diffusion_steps),
-            prompt=spec_raw.get("prompt"),
+            polar_vel_cmd=_parse_polar_vel_cmd(vel_raw),
+            prompt=prompt.strip() if prompt is not None else None,
             heading_deg=spec_raw.get("heading_deg"),
             stride=spec_raw.get("stride"),
             keyframes=spec_raw.get("keyframes"),
@@ -156,6 +265,7 @@ def load_config(path: str | Path) -> LocomotionConfig:
             emit_heading=spec_raw.get("emit_heading"),
             output_name=spec_raw.get("output_name"),
             speed_hint=spec_raw.get("speed_hint", True),
+            prompt_speed_bands=_parse_prompt_speed_bands(spec_raw.get("prompt_speed_bands")),
         )
         motion_types[name] = spec
 

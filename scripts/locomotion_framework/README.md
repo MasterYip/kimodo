@@ -151,8 +151,76 @@ motion_types:
 | Key | Axis | Range | Meaning |
 |-----|------|-------|---------|
 | `vx` | Forward | positive = forward | Walking/running speed |
-| `vy` | Lateral | positive = right | Sideways drift |
+| `vy` | Lateral | positive = **left** | Sideways drift |
 | `wz` | Angular | positive = counter-clockwise | Turning rate |
+
+> **Sign convention (corrected).** The emitted Root2D constraint is
+> `x = vy·t`, `z = vx·t` in the **native Kimodo world frame** where
+> `smooth_root_2d` `x` is **+left**, `z` is **+forward**. So positive `vy`
+> makes the robot travel +left and negative `vy` makes it travel +right.
+> Earlier README text ("positive = right") was the Y30 lateral-sign defect:
+> a "right" prompt with a constraint pushing +x (native +left) fights the
+> prompt and the model collapses by ignoring the violated dense constraint.
+> PORT-008 verified empirically from generated qpos that `vy > 0` == +left.
+> Use the **polar** form below to specify directions in the native compass.
+
+### Polar Velocity (native compass)
+
+Planar velocity can be specified in polar coordinates:
+
+```yaml
+motion_types:
+  walk_left:
+    description: "A person walks to the left."
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar:
+        speed: [0.0, 1.5]            # planar speed in m/s
+        direction_deg: [75.0, 105.0] # native compass: 0 fwd, +90 LEFT, -90 right
+      wz: [0.0, 0.0]
+    torso_height: [0.77, 0.77]
+    styles: []
+    num_samples: 5
+```
+
+The sampler converts each draw using
+
+```text
+vx = speed * cos(direction_deg)
+vy = speed * sin(direction_deg)
+```
+
+`direction_deg` uses the **native compass**: 0 = +forward, +90 = **+left**,
+-90 = **+right**, 180 = backward. This matches the PORT-008 verified sign
+convention. (An older comment "+90 = right" was the Y30 lateral-sign defect;
+see above.)
+
+Polar and Cartesian planar fields are mutually exclusive: a `polar` block
+cannot be combined with `vx` or `vy`. `wz` remains independent and may be
+used with either representation. Direction intervals may use values outside
+`[-180, 180]` for sectors crossing the wrap boundary (e.g. `[165, 195]` for
+backward), but their span must not exceed 360 degrees. With
+`sampling_method: lhs`, speed and direction are stratified independently,
+avoiding the radial and angular bias of sampling a Cartesian rectangle.
+
+### Per-speed-band exact prompts (`prompt_speed_bands`)
+
+A single direction group can track the whole speed spectrum with an exact
+prompt chosen per sample from the sampled planar speed:
+
+```yaml
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly forward."]
+      - [0.85, "A person walks forward."]
+      - [1.20, "A person walks briskly forward."]
+      - [1.51, "A person jogs forward."]
+```
+
+The first band whose `max_speed` is strictly above the sampled planar speed
+provides the exact prompt (no style/torso/speed hints are appended). This is
+how the `g1_natural_distributed_velocity.yaml` config keeps "A person walks
+<direction>." natural at 0 m/s (standing) and at >1 m/s (jogging).
 
 ---
 
@@ -184,7 +252,8 @@ demo `05_root_path` method:
   Kimodo demo approach. The diffusion model with hard inpainting at each
   DDIM step produces clean motions without tail jitter.
 
-- **Straight-line**: `x(t) = vx · t · dt`, `z(t) = vy · t · dt`
+- **Straight-line**: `x(t) = vy · t · dt` (lateral, +left), `z(t) = vx · t · dt`
+  (forward) in the native Kimodo world frame
 
 - **Arc turning**: Circular arc with heading constraints via
   `global_root_heading`

@@ -13,19 +13,19 @@ cd /data/masteryip/kimodo/kimodo
 source scripts/env.sh
 
 # Dry run — see what will be generated with naming preview
-PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
+PYTHONPATH=scripts python3 -m locomotion_framework.orchestrator \
     -c scripts/locomotion_framework/configs/g1_normal_loco.yaml --dry-run --preset rltracker
 
 # Generate full batch (all motion types, single GPU)
-PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
+PYTHONPATH=scripts python3 -m locomotion_framework.orchestrator \
     -c scripts/locomotion_framework/configs/g1_normal_loco.yaml --preset rltracker
 
 # Generate exactly 100 motions (random weighted selection)
-PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
+PYTHONPATH=scripts python3 -m locomotion_framework.orchestrator \
     -c scripts/locomotion_framework/configs/g1_normal_loco.yaml -n 100
 
 # Use a specific GPU
-PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
+PYTHONPATH=scripts python3 -m locomotion_framework.orchestrator \
     -c scripts/locomotion_framework/configs/g1_normal_loco.yaml -g 1
 ```
 
@@ -303,7 +303,7 @@ outputs/locomotion/
 
 ```bash
 # Run on generated output
-PYTHONPATH=. python3 scripts/locomotion_framework/analyze_quality.py outputs/normal_loco
+PYTHONPATH=scripts python3 scripts/locomotion_framework/analyze_quality.py outputs/normal_loco
 ```
 
 Metrics computed:

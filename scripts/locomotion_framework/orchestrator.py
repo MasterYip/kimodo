@@ -3,9 +3,9 @@
 Usage:
     cd /data/masteryip/kimodo/kimodo
     source scripts/env.sh
-    PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
+    PYTHONPATH=scripts python3 -m locomotion_framework.orchestrator \
         --config scripts/locomotion_framework/configs/g1_locomotion.yaml
-    PYTHONPATH=. python3 -m locomotion_framework.orchestrator \
+    PYTHONPATH=scripts python3 -m locomotion_framework.orchestrator \
         --config scripts/locomotion_framework/configs/g1_locomotion.yaml --dry-run
 """
 
@@ -32,6 +32,28 @@ from .constraints import build_constraints_json
 
 # Import export preset registry (populates _registry)
 from .export_presets import get_preset, list_presets  # noqa: E402
+
+
+KIMODO_MAX_DURATION_S = 10.0
+
+
+def _validate_generation_timing(
+    configured_fps: float,
+    durations: list[float],
+    model_fps: float,
+) -> None:
+    """Reject FPS mismatches and clips beyond Kimodo's supported horizon."""
+    if not np.isclose(float(configured_fps), float(model_fps), atol=1e-8):
+        raise ValueError(
+            f"Configured fps={configured_fps:g} does not match the loaded model's native "
+            f"fps={model_fps:g}. Kimodo frames must not be relabeled or temporally compressed."
+        )
+    too_long = [duration for duration in durations if duration > KIMODO_MAX_DURATION_S + 1e-8]
+    if too_long:
+        raise ValueError(
+            f"Requested duration {max(too_long):g}s exceeds Kimodo's supported "
+            f"{KIMODO_MAX_DURATION_S:g}s horizon ({int(round(model_fps * KIMODO_MAX_DURATION_S))} frames)."
+        )
 
 
 def _assign_global_indices(samples: list[SampledMotion]) -> None:
@@ -253,6 +275,7 @@ def _generate_batch(
     """
     from kimodo import load_model
     from kimodo.constraints import load_constraints_lst
+    from kimodo.tools import seed_everything
 
     # Load model once per batch
     model, resolved_name = load_model(
@@ -262,8 +285,20 @@ def _generate_batch(
     )
 
     n = len(samples)
-    fps = config.global_.fps
+    model_fps = float(model.motion_rep.fps)
+    _validate_generation_timing(
+        config.global_.fps,
+        [float(sample.duration) for sample in samples],
+        model_fps,
+    )
+    fps = model_fps
     seed_val = config.global_.seed if config.global_.seed is not None else 0
+    batch_seed = seed_val + min(getattr(sample, "_global_idx", 0) for sample in samples)
+    seed_everything(batch_seed, deterministic=True)
+    print(
+        f"  Provenance: resolved_model={resolved_name} native_fps={model_fps:g} "
+        f"batch_seed={batch_seed} max_duration_s={KIMODO_MAX_DURATION_S:g}"
+    )
 
     # ── Build per-sample lists (demo 05_root_path method) ────────────
     per_prompts: list[str] = []

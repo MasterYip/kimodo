@@ -23,7 +23,13 @@ def _torso_height_hint(height: float) -> str:
 
 
 def _speed_hint(vel: Optional[dict[str, float]] = None) -> str:
-    """Map velocity magnitude to a speed descriptor."""
+    """Map planar velocity magnitude to a speed descriptor.
+
+    Uses planar speed ``hypot(vx, vy)`` (not just ``|vx|``) so that lateral
+    and backward motions get the correct pace hint too.  For forward-dominant
+    motions this is identical to the old ``|vx|`` behaviour; for pure-lateral
+    motions it fixes the wrong "very slowly" hint that the vx-only metric gave.
+    """
     if vel is None:
         return ""
     vx = vel.get("vx", 0.0)

@@ -34,15 +34,50 @@ class SampledMotion:
     speed_hint: bool = True
 
 
+def polar_to_cartesian(speed: float, direction_deg: float) -> dict[str, float]:
+    """Convert polar speed/direction to the framework vx/vy convention.
+
+    Native compass: 0 deg = +forward, +90 deg = +left, -90 deg = +right.
+    This matches the PORT-008 verified sign convention (and is the OPPOSITE
+    of the older framework README "+90 = right" comment, which was the Y30
+    lateral-sign defect).  The emitted Root2D constraint is
+    ``x = vy*t, z = vx*t`` in native Kimodo world frame (x +left, z +forward),
+    so ``direction_deg = +90`` (left) yields ``vy > 0`` -> ``x > 0`` -> +left.
+    """
+    theta = np.deg2rad(direction_deg)
+    return {
+        "vx": float(speed * np.cos(theta)),
+        "vy": float(speed * np.sin(theta)),
+    }
+
+
+def _planar_speed(vel: dict[str, float]) -> float:
+    vx = vel.get("vx", 0.0)
+    vy = vel.get("vy", 0.0)
+    return float(np.hypot(vx, vy))
+
+
 def _prompt_for_spec(spec: MotionSpec, style: str, torso_height: Optional[float],
                      vel: dict[str, float]) -> str:
     """Build the final prompt for a spec.
 
-    If the spec declares an exact ``prompt`` override it is used verbatim
-    (normalised to end with a single period).  Otherwise the description is
-    composed with style/torso/speed hints (speed hint suppressed when
-    ``spec.speed_hint`` is False).
+    Resolution order:
+      1. ``prompt_speed_bands`` — exact prompt selected by the sampled planar
+         speed (first band whose max_speed is strictly above the speed).
+      2. ``prompt`` exact override — used verbatim.
+      3. Otherwise composed from description/style/torso/speed hints (speed
+         hint suppressed when ``spec.speed_hint`` is False).
     """
+    if spec.prompt_speed_bands:
+        speed = _planar_speed(vel)
+        prompt = None
+        for max_speed, band_prompt in spec.prompt_speed_bands:
+            if speed < max_speed:
+                prompt = band_prompt
+                break
+        if prompt is None:
+            prompt = spec.prompt_speed_bands[-1][1]
+        return prompt.rstrip(".") + "."
     if spec.prompt:
         return spec.prompt.rstrip(".") + "."
     return build_motion_prompt(
@@ -69,22 +104,13 @@ def _extra_kwargs(spec: MotionSpec) -> dict:
     )
 
 
-def polar_to_cartesian(speed: float, direction_deg: float) -> dict[str, float]:
-    """Convert polar speed/direction to the framework vx/vy convention."""
-    theta = np.deg2rad(direction_deg)
-    return {
-        "vx": float(speed * np.cos(theta)),
-        "vy": float(speed * np.sin(theta)),
-    }
-
-
 def _sort_key_for(sample: SampledMotion, by: str) -> float:
     """Return a scalar sort key for a sampled motion.
 
     Args:
         sample: A SampledMotion instance.
         by: Sort dimension — "vx", "vy", "wz", "speed" (|v|),
-            "torso", or "duration".
+            "direction"/"direction_deg", "torso", or "duration".
 
     Returns:
         Float sort key (lower = earlier).
@@ -96,15 +122,13 @@ def _sort_key_for(sample: SampledMotion, by: str) -> float:
     elif by == "wz":
         return sample.vel.get("wz", 0.0)
     elif by == "speed":
-        vx = sample.vel.get("vx", 0.0)
-        vy = sample.vel.get("vy", 0.0)
-        return (vx ** 2 + vy ** 2) ** 0.5
+        return _planar_speed(sample.vel)
     elif by in {"direction", "direction_deg"}:
         vx = sample.vel.get("vx", 0.0)
         vy = sample.vel.get("vy", 0.0)
         return float(np.degrees(np.arctan2(vy, vx)))
     elif by == "torso":
-        return sample.torso_height
+        return sample.torso_height if sample.torso_height is not None else 0.0
     elif by == "duration":
         return sample.duration
     else:
@@ -149,7 +173,7 @@ def _spec_param_ranges(spec: MotionSpec) -> list[tuple[float, float]]:
     """Return ordered continuous-parameter ranges for a MotionSpec.
 
     Order: duration, planar velocity, wz, torso_height. Planar velocity is
-    either Cartesian vx/vy or polar speed/direction_deg.
+    either Cartesian vx/vy or polar speed/direction_deg (mutually exclusive).
     """
     ranges = [spec.duration_range]
     if spec.polar_vel_cmd is not None:
@@ -158,9 +182,10 @@ def _spec_param_ranges(spec: MotionSpec) -> list[tuple[float, float]]:
             spec.polar_vel_cmd.direction_deg.min,
             spec.polar_vel_cmd.direction_deg.max,
         ))
-    for key in ("vx", "vy") if spec.polar_vel_cmd is None else ():
-        if key in spec.vel_cmd:
-            ranges.append((spec.vel_cmd[key].min, spec.vel_cmd[key].max))
+    else:
+        for key in ("vx", "vy"):
+            if key in spec.vel_cmd:
+                ranges.append((spec.vel_cmd[key].min, spec.vel_cmd[key].max))
     if "wz" in spec.vel_cmd:
         ranges.append((spec.vel_cmd["wz"].min, spec.vel_cmd["wz"].max))
     if spec.torso_height_range is not None:
@@ -234,10 +259,13 @@ class MotionSampler:
             speed = spec.polar_vel_cmd.speed.sample(self.rng)
             direction_deg = spec.polar_vel_cmd.direction_deg.sample(self.rng)
             vel.update(polar_to_cartesian(speed, direction_deg))
-        for key, velocity_range in spec.vel_cmd.items():
-            vel[key] = velocity_range.sample(self.rng)
+        for key, vr in spec.vel_cmd.items():
+            vel[key] = vr.sample(self.rng)
 
-        torso_height = self.rng.uniform(*spec.torso_height_range) if spec.torso_height_range is not None else None
+        torso_height = (
+            self.rng.uniform(*spec.torso_height_range)
+            if spec.torso_height_range is not None else None
+        )
 
         prompt = _prompt_for_spec(spec, style, torso_height, vel)
 
@@ -266,8 +294,8 @@ class MotionSampler:
         Args:
             method: "uniform" (default) or "lhs" (Latin Hypercube Sampling).
             rerank: If set, sort samples within each type by this dimension
-                    before returning ("vx", "vy", "wz", "speed", "torso",
-                    "duration").  Empty string = no sort (random order).
+                    before returning ("vx", "vy", "wz", "speed",
+                    "direction", "torso", "duration").  Empty string = no sort.
 
         Returns:
             Dict mapping type_name → list of SampledMotion objects.
@@ -328,6 +356,7 @@ class MotionSampler:
                     num_samples=n,
                     diffusion_steps=spec.diffusion_steps,
                     prompt=spec.prompt,
+                    prompt_speed_bands=spec.prompt_speed_bands,
                     **_extra_kwargs(spec),
                 )
                 results.extend(_lhs_sample_from_spec(self.rng, spec_copy))

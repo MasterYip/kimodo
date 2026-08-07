@@ -66,7 +66,11 @@ def _assign_global_indices(samples: list[SampledMotion]) -> None:
 
 
 def _polar_components(vel: dict[str, float]) -> tuple[float, float]:
-    """Return planar speed and direction in degrees from sampled vx/vy."""
+    """Return planar speed and direction in degrees from sampled vx/vy.
+
+    Direction uses the native compass (0 = +forward, +90 = +left,
+    -90 = +right) — the same convention as ``polar_to_cartesian``.
+    """
     vx = vel.get("vx", 0.0)
     vy = vel.get("vy", 0.0)
     return float(np.hypot(vx, vy)), float(np.degrees(np.arctan2(vy, vx)))
@@ -81,13 +85,14 @@ def _save_metadata(out_dir: Path, samples: list[SampledMotion]) -> None:
         "parameters": [],
     }
     for s in samples:
+        speed_mps, direction_deg = _polar_components(s.vel)
         metadata["parameters"].append({
             "motion_type": s.motion_type,
             "prompt": s.prompt,
             "duration_s": round(s.duration, 2),
             "vel": {k: round(v, 4) for k, v in s.vel.items()},
-            "speed_mps": round(_polar_components(s.vel)[0], 4),
-            "direction_deg": round(_polar_components(s.vel)[1], 4),
+            "speed_mps": round(speed_mps, 4),
+            "direction_deg": round(direction_deg, 4),
             "torso_height": round(s.torso_height, 3) if s.torso_height is not None else None,
             "style": s.style,
             "diffusion_steps": s.diffusion_steps,
@@ -109,6 +114,7 @@ def _save_manifest(csv_path: Path, all_samples: list[SampledMotion],
             "path",
         ])
         for i, s in enumerate(all_samples):
+            speed_mps, direction_deg = _polar_components(s.vel)
             if preset == "rltracker":
                 if getattr(s, "output_name", None):
                     name = s.output_name
@@ -126,8 +132,8 @@ def _save_manifest(csv_path: Path, all_samples: list[SampledMotion],
                 round(s.vel.get("vx", 0), 4),
                 round(s.vel.get("vy", 0), 4),
                 round(s.vel.get("wz", 0), 4),
-                round(_polar_components(s.vel)[0], 4),
-                round(_polar_components(s.vel)[1], 4),
+                round(speed_mps, 4),
+                round(direction_deg, 4),
                 round(s.torso_height, 3) if s.torso_height is not None else "",
                 s.style,
                 path_str,
@@ -200,12 +206,20 @@ def run_generation(
             print(f"\n{'─' * 60}")
             print(f"[{type_name}] {n} samples")
             print(f"  Prompt:  {spec.description}")
-            vx_range = spec.vel_cmd.get("vx", VelRange(0.0, 0.0))
-            vy_range = spec.vel_cmd.get("vy", VelRange(0.0, 0.0))
-            wz_range = spec.vel_cmd.get("wz", VelRange(0.0, 0.0))
-            print(f"  Vel:     vx=[{vx_range.min:.2f}, {vx_range.max:.2f}] "
-                  f"vy=[{vy_range.min:.2f}, {vy_range.max:.2f}] "
-                  f"wz=[{wz_range.min:.2f}, {wz_range.max:.2f}]")
+            if spec.polar_vel_cmd is not None:
+                print(f"  Vel(polar): speed=[{spec.polar_vel_cmd.speed.min:.2f}, "
+                      f"{spec.polar_vel_cmd.speed.max:.2f}] m/s  direction_deg="
+                      f"[{spec.polar_vel_cmd.direction_deg.min:.1f}, "
+                      f"{spec.polar_vel_cmd.direction_deg.max:.1f}] (0 fwd, +90 left)")
+                wz_range = spec.vel_cmd.get("wz", VelRange(0.0, 0.0))
+                print(f"  Vel:     wz=[{wz_range.min:.2f}, {wz_range.max:.2f}]")
+            else:
+                vx_range = spec.vel_cmd.get("vx", VelRange(0.0, 0.0))
+                vy_range = spec.vel_cmd.get("vy", VelRange(0.0, 0.0))
+                wz_range = spec.vel_cmd.get("wz", VelRange(0.0, 0.0))
+                print(f"  Vel:     vx=[{vx_range.min:.2f}, {vx_range.max:.2f}] "
+                      f"vy=[{vy_range.min:.2f}, {vy_range.max:.2f}] "
+                      f"wz=[{wz_range.min:.2f}, {wz_range.max:.2f}]")
             torso_range_str = f"[{spec.torso_height_range[0]:.2f}, {spec.torso_height_range[1]:.2f}]" if spec.torso_height_range is not None else "unconstrained"
             print(f"  Torso:   {torso_range_str}")
             print(f"  Styles:  {spec.styles}")

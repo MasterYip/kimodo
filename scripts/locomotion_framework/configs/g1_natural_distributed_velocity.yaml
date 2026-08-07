@@ -1,0 +1,215 @@
+# =============================================================================
+# DATA-KIMODO-VELOCITY-DISTRIBUTION-009 — one grouped config, well-distributed
+# velocity across ALL directions, natural motion (PORT-008 recipe).
+#
+# User directive (2026-08-07): "design a new config, ensure the velocity is
+# well distributed, and keep the motion natural."
+#
+# DESIGN (see task design note for the full rationale):
+#   * 8 direction groups, each a `vel_cmd.polar` group with
+#       speed: [0.0, 1.5]            <- FULL planar speed spectrum (stand ->
+#                                        walk -> brisk -> jog). Deliberately
+#                                        INCLUDES the 0.0-0.45 "slow tail" as a
+#                                        clean falsifiable test of whether low
+#                                        speed ALONE collapses the hand-crotch
+#                                        pose (prior evidence was confounded:
+#                                        Y30 wrong-sign + 6s; polar batch
+#                                        wrong-sign + non-exact prompt).
+#       direction_deg: <narrow band>  <- native compass, 0 deg = +forward,
+#                                        +90 deg = +left, -90 deg = +right.
+#                                        Bands are ±15 deg and NEVER cross into
+#                                        an adjacent quadrant, so the emitted
+#                                        Root2D constraint always agrees with
+#                                        the group's prompt.  This is the sign
+#                                        convention VERIFIED by PORT-008
+#                                        (vy=+ -> +left in native Kimodo
+#                                        smooth_root_2d x).  The older polar
+#                                        config comment "+90 = right" was the
+#                                        Y30 lateral-sign defect; our bands
+#                                        deliberately use the native compass.
+#   * num_samples: 5 per group (LHS) = 40 motions.  LHS stratifies the speed
+#       dimension [0,1.5] into 5 cells -> ~one sample per speed zone
+#       (stand/slow/walk/brisk/jog) in every direction.
+#   * Per-speed-band exact prompts (`prompt_speed_bands`): the prompt is chosen
+#       from the sampled planar speed so a 0.05 m/s sample says "stands still"
+#       and a 1.4 m/s sample says "jogs" — one fixed "walks" sentence would be
+#       wrong at both ends of the spectrum.
+#   * Natural recipe (frozen from FRAMEWORK-PORT-008 causal analysis):
+#       duration [8.0, 8.0], torso_height [0.77, 0.77] (neutral band -> no hint),
+#       styles [], separated CFG [2.0, 2.0], fixed seed, model kimodo-g1-rp,
+#       fps 30, export_preset rltracker.
+#
+# Usage:
+#   cd <worktree>
+#   source scripts/env.sh   # ROOT-FS-SAFE: all temp/cache/log on /data
+#   PYTHONPATH=scripts python3 scripts/locomotion_framework/generate_velocity_distribution.py \
+#       --config scripts/locomotion_framework/configs/g1_natural_distributed_velocity.yaml \
+#       --output /data/masteryip/kimodo/datasets/DATA-KIMODO-VELOCITY-DISTRIBUTION-009/batch_raw \
+#       --gpu 0
+# =============================================================================
+
+global:
+  model: kimodo-g1-rp
+  diffusion_steps: 100
+  seed: 20260807
+  fps: 30
+  output_dir: /data/masteryip/kimodo/datasets/DATA-KIMODO-VELOCITY-DISTRIBUTION-009/natural_distributed_velocity_raw
+  sampling_method: lhs        # Latin Hypercube Sampling: uniform coverage of
+                              #   the speed space within every direction group
+  rerank: speed               # regularise output (ascending speed within group)
+  export_preset: rltracker
+  cfg_type: separated
+  cfg_weight: [2.0, 2.0]
+
+motion_types:
+  # ── d00 forward ─────────────────────────────────────────────────────
+  d00_forward:
+    description: "A person walks forward."
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar:
+        speed: [0.0, 1.5]
+        direction_deg: [-15.0, 15.0]
+      wz: [0.0, 0.0]
+    torso_height: [0.77, 0.77]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly forward."]
+      - [0.85, "A person walks forward."]
+      - [1.20, "A person walks briskly forward."]
+      - [1.51, "A person jogs forward."]
+    num_samples: 5
+
+  # ── d01 forward-right ───────────────────────────────────────────────
+  d01_forward_right:
+    description: "A person walks forward to the right."
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar:
+        speed: [0.0, 1.5]
+        direction_deg: [-60.0, -30.0]
+      wz: [0.0, 0.0]
+    torso_height: [0.77, 0.77]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly forward to the right."]
+      - [0.85, "A person walks forward to the right."]
+      - [1.20, "A person walks briskly forward to the right."]
+      - [1.51, "A person jogs forward to the right."]
+    num_samples: 5
+
+  # ── d02 right ───────────────────────────────────────────────────────
+  d02_right:
+    description: "A person walks to the right."
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar:
+        speed: [0.0, 1.5]
+        direction_deg: [-105.0, -75.0]
+      wz: [0.0, 0.0]
+    torso_height: [0.77, 0.77]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly to the right."]
+      - [0.85, "A person walks to the right."]
+      - [1.20, "A person walks briskly to the right."]
+      - [1.51, "A person jogs to the right."]
+    num_samples: 5
+
+  # ── d03 backward-right ──────────────────────────────────────────────
+  d03_backward_right:
+    description: "A person walks backward to the right."
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar:
+        speed: [0.0, 1.5]
+        direction_deg: [-150.0, -120.0]
+      wz: [0.0, 0.0]
+    torso_height: [0.77, 0.77]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly backward to the right."]
+      - [0.85, "A person walks backward to the right."]
+      - [1.20, "A person walks briskly backward to the right."]
+      - [1.51, "A person jogs backward to the right."]
+    num_samples: 5
+
+  # ── d04 backward ────────────────────────────────────────────────────
+  d04_backward:
+    description: "A person walks backward."
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar:
+        speed: [0.0, 1.5]
+        direction_deg: [165.0, 195.0]
+      wz: [0.0, 0.0]
+    torso_height: [0.77, 0.77]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly backward."]
+      - [0.85, "A person walks backward."]
+      - [1.20, "A person walks briskly backward."]
+      - [1.51, "A person jogs backward."]
+    num_samples: 5
+
+  # ── d05 backward-left ───────────────────────────────────────────────
+  d05_backward_left:
+    description: "A person walks backward to the left."
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar:
+        speed: [0.0, 1.5]
+        direction_deg: [120.0, 150.0]
+      wz: [0.0, 0.0]
+    torso_height: [0.77, 0.77]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly backward to the left."]
+      - [0.85, "A person walks backward to the left."]
+      - [1.20, "A person walks briskly backward to the left."]
+      - [1.51, "A person jogs backward to the left."]
+    num_samples: 5
+
+  # ── d06 left ────────────────────────────────────────────────────────
+  d06_left:
+    description: "A person walks to the left."
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar:
+        speed: [0.0, 1.5]
+        direction_deg: [75.0, 105.0]
+      wz: [0.0, 0.0]
+    torso_height: [0.77, 0.77]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly to the left."]
+      - [0.85, "A person walks to the left."]
+      - [1.20, "A person walks briskly to the left."]
+      - [1.51, "A person jogs to the left."]
+    num_samples: 5
+
+  # ── d07 forward-left ────────────────────────────────────────────────
+  d07_forward_left:
+    description: "A person walks forward to the left."
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar:
+        speed: [0.0, 1.5]
+        direction_deg: [30.0, 60.0]
+      wz: [0.0, 0.0]
+    torso_height: [0.77, 0.77]
+    styles: []
+    prompt_speed_bands:
+      - [0.15, "A person stands still."]
+      - [0.45, "A person walks slowly forward to the left."]
+      - [0.85, "A person walks forward to the left."]
+      - [1.20, "A person walks briskly forward to the left."]
+      - [1.51, "A person jogs forward to the left."]
+    num_samples: 5

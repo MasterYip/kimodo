@@ -1,4 +1,4 @@
-"""Tests for polar velocity configuration and sampling."""
+"""Tests for polar velocity configuration and sampling (merged framework)."""
 
 from pathlib import Path
 import sys
@@ -39,9 +39,11 @@ motion_types:
     return path
 
 
-def test_polar_conversion_uses_forward_right_convention():
+def test_polar_conversion_uses_native_compass():
+    # Native compass: 0 = +forward, +90 = +left, -90 = +right, 180 = backward.
     assert polar_to_cartesian(0.5, 0.0) == pytest.approx({"vx": 0.5, "vy": 0.0})
-    assert polar_to_cartesian(0.5, 90.0) == pytest.approx({"vx": 0.0, "vy": 0.5})
+    assert polar_to_cartesian(0.5, 90.0) == pytest.approx({"vx": 0.0, "vy": 0.5})  # +left
+    assert polar_to_cartesian(0.5, -90.0) == pytest.approx({"vx": 0.0, "vy": -0.5})  # +right
     assert polar_to_cartesian(0.5, 180.0) == pytest.approx({"vx": -0.5, "vy": 0.0})
 
 
@@ -49,7 +51,7 @@ def test_lhs_stratifies_speed_and_direction(tmp_path):
     config = load_config(_write_config(
         tmp_path,
         """      polar:
-        speed: [0.35, 0.85]
+        speed: [0.0, 1.5]
         direction_deg: [-180.0, 180.0]
       wz: [0.0, 0.0]""",
     ))
@@ -59,12 +61,15 @@ def test_lhs_stratifies_speed_and_direction(tmp_path):
     directions = np.array([
         np.degrees(np.arctan2(s.vel["vy"], s.vel["vx"])) for s in samples
     ])
-    assert np.all((0.35 <= speeds) & (speeds <= 0.85))
+    assert np.all((0.0 <= speeds) & (speeds <= 1.5))
     assert np.all((-180.0 <= directions) & (directions <= 180.0))
 
     n = len(samples)
-    speed_cells = np.floor((speeds - 0.35) / (0.85 - 0.35) * n).astype(int)
+    speed_cells = np.floor(speeds / 1.5 * n).astype(int)
+    speed_cells = np.clip(speed_cells, 0, n - 1)
     direction_cells = np.floor((directions + 180.0) / 360.0 * n).astype(int)
+    direction_cells = np.clip(direction_cells, 0, n - 1)
+    # LHS: each speed stratum and each direction stratum appears once.
     assert sorted(speed_cells.tolist()) == list(range(n))
     assert sorted(direction_cells.tolist()) == list(range(n))
 
@@ -80,8 +85,14 @@ def test_uniform_sampling_preserves_planar_speed_in_prompt(tmp_path):
     ))
     sample = MotionSampler(config, seed=1).sample_params(config.motion_types["walk"])
     assert sample.vel == pytest.approx({"vx": 0.0, "vy": 0.5, "wz": 0.0})
+    # planar speed 0.5 -> neutral pace hint (no "very slowly" from vx=0)
     assert "very slowly" not in sample.prompt
     assert _speed_hint(sample.vel) == ""
+
+
+def test_lateral_high_speed_gets_brisk_hint():
+    # The planar _speed_hint must not call a 1.0 m/s lateral motion "very slowly".
+    assert _speed_hint({"vx": 0.0, "vy": 1.0}) == "at a brisk pace"
 
 
 def test_rejects_mixed_cartesian_and_polar(tmp_path):
@@ -89,7 +100,7 @@ def test_rejects_mixed_cartesian_and_polar(tmp_path):
         tmp_path,
         """      vx: [0.0, 1.0]
       polar:
-        speed: [0.35, 0.85]
+        speed: [0.0, 1.5]
         direction_deg: [-180.0, 180.0]""",
     )
     with pytest.raises(ValueError, match="cannot be combined"):

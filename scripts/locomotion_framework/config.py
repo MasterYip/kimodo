@@ -26,6 +26,8 @@ class MotionSpec:
     """Defines a distribution over one motion type (walk, run, stand, etc.)."""
     name: str
     description: str = ""                  # base text prompt template; empty = unconstrained
+    prompt_override: Optional[str] = None   # exact final prompt; bypasses composition
+    arm_swing: str = "none"                 # text intent: auto/sagittal/lateral/none
     duration_range: tuple[float, float] = (3.0, 8.0)  # (min, max) seconds
     vel_cmd: dict[str, VelRange] = field(default_factory=dict)  # {"vx": ..., "vy": ..., "wz": ...}
     torso_height_range: Optional[tuple[float, float]] = None  # (min, max) normalized; None = unconstrained
@@ -162,9 +164,21 @@ def load_config(path: str | Path) -> LocomotionConfig:
 
     motion_types = {}
     for name, spec_raw in raw.get("motion_types", {}).items():
+        prompt_override = spec_raw.get("prompt")
+        if prompt_override is not None and (
+            not isinstance(prompt_override, str) or not prompt_override.strip()
+        ):
+            raise ValueError(f"motion_types.{name}.prompt must be a non-empty string")
+        arm_swing = spec_raw.get("arm_swing", "none")
+        if arm_swing not in {"auto", "sagittal", "lateral", "none"}:
+            raise ValueError(
+                f"motion_types.{name}.arm_swing must be auto/sagittal/lateral/none"
+            )
         spec = MotionSpec(
             name=name,
             description=spec_raw.get("description", ""),
+            prompt_override=prompt_override.strip() if prompt_override is not None else None,
+            arm_swing=arm_swing,
             duration_range=tuple(spec_raw["duration"]) if "duration" in spec_raw else (3.0, 8.0),
             vel_cmd=_parse_vel_cmd(spec_raw.get("vel_cmd", {})),
             torso_height_range=tuple(spec_raw["torso_height"]) if "torso_height" in spec_raw else None,

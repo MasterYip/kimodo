@@ -51,6 +51,8 @@ def _prompt_for_spec(spec: MotionSpec, style: str, torso_height: Optional[float]
         torso_height=torso_height if (torso_height is not None and spec.name != "stand") else None,
         vel=vel,
         speed_hint=spec.speed_hint,
+        exact_prompt=spec.prompt_override,
+        arm_swing=spec.arm_swing,
     )
 
 
@@ -282,6 +284,8 @@ class MotionSampler:
                 spec_copy = MotionSpec(
                     name=spec.name,
                     description=spec.description,
+                    prompt_override=spec.prompt_override,
+                    arm_swing=spec.arm_swing,
                     duration_range=spec.duration_range,
                     vel_cmd=dict(spec.vel_cmd),
                     torso_height_range=spec.torso_height_range,

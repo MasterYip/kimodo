@@ -124,7 +124,9 @@ def evaluate_motion(path: str | Path, provenance: dict | None = None) -> tuple[d
     order_cross = shoulder_sign*wrist_sign < 0
     midline_cross = ((np.sign(left[:, 1])*np.sign(local[:, LEFT_SHOULDER, 1]) < 0) |
                      (np.sign(right[:, 1])*np.sign(local[:, RIGHT_SHOULDER, 1]) < 0))
-    both = np.concatenate((left[core, :2], right[core, :2]), axis=0)
+    left_centered = left[core, :2] - np.mean(left[core, :2], axis=0)
+    right_centered = right[core, :2] - np.mean(right[core, :2], axis=0)
+    both = np.concatenate((left_centered, right_centered), axis=0)
     cov = np.cov(both.T); values, vectors = np.linalg.eigh(cov); dominant = vectors[:, np.argmax(values)]
     forward_amp = float(np.mean([np.ptp(left[core, 0]), np.ptp(right[core, 0])]))
     lateral_amp = float(np.mean([np.ptp(left[core, 1]), np.ptp(right[core, 1])]))

@@ -21,9 +21,9 @@ class SampledMotion:
     prompt: str               # final text prompt
     duration: float           # seconds
     vel: dict[str, float]     # {"vx": 0.5, "vy": 0.0, "wz": 0.1}
-    torso_height: float       # normalized
-    style: str
-    diffusion_steps: int
+    torso_height: Optional[float] = None  # normalized; None = unconstrained
+    style: str = ""
+    diffusion_steps: int = 100
     # ── Distributed-Root2D extensions (DATA-KIMODO-FRAMEWORK-PORT-008) ──
     heading_deg: Optional[float] = None
     stride: Optional[int] = None
@@ -34,7 +34,7 @@ class SampledMotion:
     speed_hint: bool = True
 
 
-def _prompt_for_spec(spec: MotionSpec, style: str, torso_height: float,
+def _prompt_for_spec(spec: MotionSpec, style: str, torso_height: Optional[float],
                      vel: dict[str, float]) -> str:
     """Build the final prompt for a spec.
 
@@ -48,7 +48,7 @@ def _prompt_for_spec(spec: MotionSpec, style: str, torso_height: float,
     return build_motion_prompt(
         spec.description,
         style,
-        torso_height=torso_height if spec.name != "stand" else None,
+        torso_height=torso_height if (torso_height is not None and spec.name != "stand") else None,
         vel=vel,
         speed_hint=spec.speed_hint,
     )
@@ -140,7 +140,8 @@ def _spec_param_ranges(spec: MotionSpec) -> list[tuple[float, float]]:
     for key in ("vx", "vy", "wz"):
         if key in spec.vel_cmd:
             ranges.append((spec.vel_cmd[key].min, spec.vel_cmd[key].max))
-    ranges.append(spec.torso_height_range)
+    if spec.torso_height_range is not None:
+        ranges.append(spec.torso_height_range)
     return ranges
 
 
@@ -201,7 +202,7 @@ class MotionSampler:
         for key, vr in spec.vel_cmd.items():
             vel[key] = vr.sample(self.rng)
 
-        torso_height = self.rng.uniform(*spec.torso_height_range)
+        torso_height = self.rng.uniform(*spec.torso_height_range) if spec.torso_height_range is not None else None
 
         prompt = _prompt_for_spec(spec, style, torso_height, vel)
 

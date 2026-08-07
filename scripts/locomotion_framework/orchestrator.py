@@ -51,7 +51,7 @@ def _save_metadata(out_dir: Path, samples: list[SampledMotion]) -> None:
             "prompt": s.prompt,
             "duration_s": round(s.duration, 2),
             "vel": {k: round(v, 4) for k, v in s.vel.items()},
-            "torso_height": round(s.torso_height, 3),
+            "torso_height": round(s.torso_height, 3) if s.torso_height is not None else None,
             "style": s.style,
             "diffusion_steps": s.diffusion_steps,
         })
@@ -89,7 +89,7 @@ def _save_manifest(csv_path: Path, all_samples: list[SampledMotion],
                 round(s.vel.get("vx", 0), 4),
                 round(s.vel.get("vy", 0), 4),
                 round(s.vel.get("wz", 0), 4),
-                round(s.torso_height, 3),
+                round(s.torso_height, 3) if s.torso_height is not None else "",
                 s.style,
                 path_str,
             ])
@@ -142,7 +142,8 @@ def run_generation(
                 print(f"  [{global_idx:03d}] {name}")
                 print(f"        prompt: {s.prompt}")
                 if s.vel:
-                    print(f"        vel={s.vel} torso={s.torso_height:.2f}")
+                    torso_str = f"{s.torso_height:.2f}" if s.torso_height is not None else "—"
+                    print(f"        vel={s.vel} torso={torso_str}")
                 global_idx += 1
             global_idx += max(0, len(samples) - 3)
         print()
@@ -165,7 +166,8 @@ def run_generation(
             print(f"  Vel:     vx=[{vx_range.min:.2f}, {vx_range.max:.2f}] "
                   f"vy=[{vy_range.min:.2f}, {vy_range.max:.2f}] "
                   f"wz=[{wz_range.min:.2f}, {wz_range.max:.2f}]")
-            print(f"  Torso:   {spec.torso_height_range}")
+            torso_range_str = f"[{spec.torso_height_range[0]:.2f}, {spec.torso_height_range[1]:.2f}]" if spec.torso_height_range is not None else "unconstrained"
+            print(f"  Torso:   {torso_range_str}")
             print(f"  Styles:  {spec.styles}")
 
         if dry_run:
@@ -176,7 +178,8 @@ def run_generation(
                 for i, s in enumerate(samples[:3]):
                     print(f"  [{i:03d}] {s.prompt}")
                     if s.vel:
-                        print(f"        vel={s.vel} torso={s.torso_height:.2f}")
+                        torso_str = f"{s.torso_height:.2f}" if s.torso_height is not None else "—"
+                        print(f"        vel={s.vel} torso={torso_str}")
                 if n > 3:
                     print(f"  ... and {n - 3} more")
                 all_samples.extend(samples)

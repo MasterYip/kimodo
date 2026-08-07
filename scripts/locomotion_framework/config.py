@@ -1,5 +1,6 @@
 """Motion specification dataclasses and YAML config loading."""
 
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -14,11 +15,32 @@ class VelRange:
     max: float
 
     def sample(self, rng) -> float:
-        return rng.uniform(self.min, self.max)
+        return float(rng.uniform(self.min, self.max))
 
     @classmethod
     def from_list(cls, lst: list[float]) -> "VelRange":
-        return cls(min=float(lst[0]), max=float(lst[1]))
+        if not isinstance(lst, (list, tuple)) or len(lst) != 2:
+            raise ValueError("velocity ranges must be two-element [min, max] lists")
+        low, high = float(lst[0]), float(lst[1])
+        if not math.isfinite(low) or not math.isfinite(high):
+            raise ValueError("velocity range bounds must be finite")
+        if low > high:
+            raise ValueError(f"velocity range min {low} exceeds max {high}")
+        return cls(min=low, max=high)
+
+
+@dataclass
+class PolarVelRange:
+    """Planar speed and direction ranges."""
+
+    speed: VelRange
+    direction_deg: VelRange
+
+    def __post_init__(self) -> None:
+        if self.speed.min < 0.0:
+            raise ValueError("polar speed range must be non-negative")
+        if self.direction_deg.max - self.direction_deg.min > 360.0:
+            raise ValueError("polar direction range must span at most 360 degrees")
 
 
 @dataclass
@@ -32,6 +54,7 @@ class MotionSpec:
     vel_cmd: dict[str, VelRange] = field(default_factory=dict)  # {"vx": ..., "vy": ..., "wz": ...}
     torso_height_range: Optional[tuple[float, float]] = None  # (min, max) normalized; None = unconstrained
     styles: list[str] = field(default_factory=list)  # ["casually", "briskly", ...]
+    polar_vel_cmd: Optional[PolarVelRange] = None
     weight: float = 1.0                    # relative sampling probability
     num_samples: int = 10                  # how many motions from this type
     diffusion_steps: int = 100
@@ -100,11 +123,38 @@ class LocomotionConfig:
 
 def _parse_vel_cmd(raw: dict) -> dict[str, VelRange]:
     """Parse raw velocity command dict from YAML into VelRange objects."""
+    if not isinstance(raw, dict):
+        raise ValueError("vel_cmd must be a mapping")
+    if "polar" in raw and any(key in raw for key in ("vx", "vy")):
+        raise ValueError("vel_cmd.polar cannot be combined with Cartesian vx/vy")
     parsed = {}
     for key in ("vx", "vy", "wz"):
         if key in raw:
             parsed[key] = VelRange.from_list(raw[key])
     return parsed
+
+
+def _parse_polar_vel_cmd(raw: dict) -> Optional[PolarVelRange]:
+    """Parse optional polar planar velocity ranges."""
+    polar_raw = raw.get("polar")
+    if polar_raw is None:
+        return None
+    if not isinstance(polar_raw, dict):
+        raise ValueError("vel_cmd.polar must be a mapping")
+    missing = {"speed", "direction_deg"} - set(polar_raw)
+    if missing:
+        raise ValueError(
+            "vel_cmd.polar is missing required field(s): " + ", ".join(sorted(missing))
+        )
+    unknown = set(polar_raw) - {"speed", "direction_deg"}
+    if unknown:
+        raise ValueError(
+            "unknown vel_cmd.polar field(s): " + ", ".join(sorted(unknown))
+        )
+    return PolarVelRange(
+        speed=VelRange.from_list(polar_raw["speed"]),
+        direction_deg=VelRange.from_list(polar_raw["direction_deg"]),
+    )
 
 
 def _parse_root2d_constraint(raw: dict | None) -> Root2DConstraintConfig:
@@ -164,6 +214,7 @@ def load_config(path: str | Path) -> LocomotionConfig:
 
     motion_types = {}
     for name, spec_raw in raw.get("motion_types", {}).items():
+        vel_raw = spec_raw.get("vel_cmd", {})
         prompt_override = spec_raw.get("prompt")
         if prompt_override is not None and (
             not isinstance(prompt_override, str) or not prompt_override.strip()
@@ -180,9 +231,10 @@ def load_config(path: str | Path) -> LocomotionConfig:
             prompt_override=prompt_override.strip() if prompt_override is not None else None,
             arm_swing=arm_swing,
             duration_range=tuple(spec_raw["duration"]) if "duration" in spec_raw else (3.0, 8.0),
-            vel_cmd=_parse_vel_cmd(spec_raw.get("vel_cmd", {})),
+            vel_cmd=_parse_vel_cmd(vel_raw),
             torso_height_range=tuple(spec_raw["torso_height"]) if "torso_height" in spec_raw else None,
             styles=spec_raw.get("styles", []),
+            polar_vel_cmd=_parse_polar_vel_cmd(vel_raw),
             weight=spec_raw.get("weight", 1.0),
             num_samples=spec_raw.get("num_samples", 10),
             diffusion_steps=spec_raw.get("diffusion_steps", global_config.diffusion_steps),

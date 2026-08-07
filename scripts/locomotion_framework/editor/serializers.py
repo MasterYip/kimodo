@@ -10,6 +10,8 @@ from locomotion_framework.config import (
     LocomotionConfig,
     MotionSpec,
     VelRange,
+    _parse_polar_vel_cmd,
+    _parse_vel_cmd,
     load_config,
 )
 
@@ -154,10 +156,8 @@ def yaml_str_to_config(yaml_str: str, base_global: GlobalConfig | None = None) -
 
     motion_types = {}
     for name, spec_raw in raw.get("motion_types", {}).items():
-        vel_cmd = {}
-        for key in ("vx", "vy", "wz"):
-            if key in spec_raw.get("vel_cmd", {}):
-                vel_cmd[key] = VelRange.from_list(spec_raw["vel_cmd"][key])
+        vel_raw = spec_raw.get("vel_cmd", {})
+        vel_cmd = _parse_vel_cmd(vel_raw)
 
         spec = MotionSpec(
             name=name,
@@ -166,6 +166,7 @@ def yaml_str_to_config(yaml_str: str, base_global: GlobalConfig | None = None) -
             vel_cmd=vel_cmd,
             torso_height_range=tuple(spec_raw["torso_height"]) if "torso_height" in spec_raw else None,
             styles=spec_raw.get("styles", []),
+            polar_vel_cmd=_parse_polar_vel_cmd(vel_raw),
             weight=spec_raw.get("weight", 1.0),
             num_samples=spec_raw.get("num_samples", 10),
             diffusion_steps=spec_raw.get(

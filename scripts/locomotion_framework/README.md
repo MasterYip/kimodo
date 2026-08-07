@@ -157,6 +157,38 @@ motion_types:
 | `vy` | Lateral | positive = right | Sideways drift |
 | `wz` | Angular | positive = counter-clockwise | Turning rate |
 
+Planar velocity can instead be specified in polar coordinates:
+
+```yaml
+motion_types:
+  walk_any_direction:
+    description: "A person walks naturally"
+    duration: [8.0, 8.0]
+    vel_cmd:
+      polar:
+        speed: [0.35, 0.85]          # planar speed in m/s
+        direction_deg: [-180, 180]   # 0 forward, +90 right
+      wz: [0.0, 0.0]
+    torso_height: [0.77, 0.77]
+    styles: []
+    num_samples: 24
+```
+
+The sampler converts each draw using
+
+```text
+vx = speed * cos(direction_deg)
+vy = speed * sin(direction_deg)
+```
+
+Polar and Cartesian planar fields are mutually exclusive: a `polar` block
+cannot be combined with `vx` or `vy`. `wz` remains independent and may be
+used with either representation. Direction intervals may use values outside
+`[-180, 180]` for sectors crossing the wrap boundary, but their span must not
+exceed 360 degrees. With `sampling_method: lhs`, speed and direction are
+stratified independently, avoiding the radial and angular bias caused by
+sampling a Cartesian rectangle.
+
 ---
 
 
@@ -184,6 +216,8 @@ For each motion type, the sampler draws from the configured distributions:
 Sampled parameters:
 - Duration: `U(duration[0], duration[1])`
 - Velocity: `U(vx[0], vx[1])`, `U(vy[0], vy[1])`, `U(wz[0], wz[1])`
+- Polar velocity: `U(speed[0], speed[1])` and
+  `U(direction_deg[0], direction_deg[1])`, converted to `vx/vy`
 - Torso height: `U(torso_height[0], torso_height[1])`
 - Style: uniform random from `styles` list
 

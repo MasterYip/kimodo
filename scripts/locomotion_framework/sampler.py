@@ -69,6 +69,15 @@ def _extra_kwargs(spec: MotionSpec) -> dict:
     )
 
 
+def polar_to_cartesian(speed: float, direction_deg: float) -> dict[str, float]:
+    """Convert polar speed/direction to the framework vx/vy convention."""
+    theta = np.deg2rad(direction_deg)
+    return {
+        "vx": float(speed * np.cos(theta)),
+        "vy": float(speed * np.sin(theta)),
+    }
+
+
 def _sort_key_for(sample: SampledMotion, by: str) -> float:
     """Return a scalar sort key for a sampled motion.
 
@@ -90,6 +99,10 @@ def _sort_key_for(sample: SampledMotion, by: str) -> float:
         vx = sample.vel.get("vx", 0.0)
         vy = sample.vel.get("vy", 0.0)
         return (vx ** 2 + vy ** 2) ** 0.5
+    elif by in {"direction", "direction_deg"}:
+        vx = sample.vel.get("vx", 0.0)
+        vy = sample.vel.get("vy", 0.0)
+        return float(np.degrees(np.arctan2(vy, vx)))
     elif by == "torso":
         return sample.torso_height
     elif by == "duration":
@@ -135,13 +148,21 @@ def lhs_sample(rng: np.random.RandomState, ranges: list[tuple[float, float]], n:
 def _spec_param_ranges(spec: MotionSpec) -> list[tuple[float, float]]:
     """Return ordered continuous-parameter ranges for a MotionSpec.
 
-    Order: duration, vx, vy, wz, torso_height.
-    Dimensions present are determined by ``vel_cmd`` keys.
+    Order: duration, planar velocity, wz, torso_height. Planar velocity is
+    either Cartesian vx/vy or polar speed/direction_deg.
     """
     ranges = [spec.duration_range]
-    for key in ("vx", "vy", "wz"):
+    if spec.polar_vel_cmd is not None:
+        ranges.append((spec.polar_vel_cmd.speed.min, spec.polar_vel_cmd.speed.max))
+        ranges.append((
+            spec.polar_vel_cmd.direction_deg.min,
+            spec.polar_vel_cmd.direction_deg.max,
+        ))
+    for key in ("vx", "vy") if spec.polar_vel_cmd is None else ():
         if key in spec.vel_cmd:
             ranges.append((spec.vel_cmd[key].min, spec.vel_cmd[key].max))
+    if "wz" in spec.vel_cmd:
+        ranges.append((spec.vel_cmd["wz"].min, spec.vel_cmd["wz"].max))
     if spec.torso_height_range is not None:
         ranges.append(spec.torso_height_range)
     return ranges
@@ -155,18 +176,26 @@ def _lhs_sample_from_spec(
     ranges = _spec_param_ranges(spec)
     lhs_values = lhs_sample(rng, ranges, n)
 
-    vel_keys_present = [k for k in ("vx", "vy", "wz") if k in spec.vel_cmd]
-
     samples = []
     for row in range(n):
         vals = iter(lhs_values[row])
         duration = float(next(vals))
 
         vel = {}
-        for k in vel_keys_present:
-            vel[k] = float(next(vals))
+        if spec.polar_vel_cmd is not None:
+            speed = float(next(vals))
+            direction_deg = float(next(vals))
+            vel.update(polar_to_cartesian(speed, direction_deg))
+        else:
+            for key in ("vx", "vy"):
+                if key in spec.vel_cmd:
+                    vel[key] = float(next(vals))
+        if "wz" in spec.vel_cmd:
+            vel["wz"] = float(next(vals))
 
-        torso_height = float(next(vals))
+        torso_height = (
+            float(next(vals)) if spec.torso_height_range is not None else None
+        )
 
         style = spec.styles[rng.randint(len(spec.styles))] if spec.styles else ""
 
@@ -201,8 +230,12 @@ class MotionSampler:
         style = spec.styles[self.rng.randint(len(spec.styles))] if spec.styles else ""
 
         vel = {}
-        for key, vr in spec.vel_cmd.items():
-            vel[key] = vr.sample(self.rng)
+        if spec.polar_vel_cmd is not None:
+            speed = spec.polar_vel_cmd.speed.sample(self.rng)
+            direction_deg = spec.polar_vel_cmd.direction_deg.sample(self.rng)
+            vel.update(polar_to_cartesian(speed, direction_deg))
+        for key, velocity_range in spec.vel_cmd.items():
+            vel[key] = velocity_range.sample(self.rng)
 
         torso_height = self.rng.uniform(*spec.torso_height_range) if spec.torso_height_range is not None else None
 
@@ -290,6 +323,7 @@ class MotionSampler:
                     vel_cmd=dict(spec.vel_cmd),
                     torso_height_range=spec.torso_height_range,
                     styles=spec.styles,
+                    polar_vel_cmd=spec.polar_vel_cmd,
                     weight=spec.weight,
                     num_samples=n,
                     diffusion_steps=spec.diffusion_steps,

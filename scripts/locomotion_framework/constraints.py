@@ -53,9 +53,9 @@ def build_root2d_constraint(
     num_frames = int(duration * fps)
     dt = 1.0 / fps
 
-    vx = vel.get("vx", 0.0)   # forward  (body-frame)
-    vy = vel.get("vy", 0.0)   # lateral  (body-frame)  +right
-    wz = vel.get("wz", 0.0)   # angular  (rad/s)        +right turn
+    vx = vel.get("vx", 0.0)   # forward  (world frame; polar native compass)
+    vy = vel.get("vy", 0.0)   # lateral  (world frame; +left in native compass)
+    wz = vel.get("wz", 0.0)   # angular  (rad/s; +left / CCW)
 
     t = np.arange(num_frames, dtype=np.float64) * dt
 
@@ -75,26 +75,39 @@ def build_root2d_constraint(
             headings = None
     else:
         # Curved path.
-        # Body-frame velocity (vx, vy) rotates at rate wz.
-        # At each frame the body heading is θ(t) = θ₀ + wz·t.
+        # (vx, vy) are the WORLD-frame planar velocity components (native
+        # compass: vx = +forward, vy = +left, from polar_to_cartesian).  The
+        # travel direction rotates at rate wz: θ(t) = θ₀ + wz·t, where
+        # θ₀ = atan2(vy, vx) is the INITIAL travel direction (= the prompt
+        # heading).  The world-frame velocity at time t is therefore
+        #     v_X_world =  s·sin θ    (left)
+        #     v_Z_world =  s·cos θ    (forward)
+        # with s = |(vx, vy)|.
         #
-        # World-frame velocity from body-frame (vx, vy):
-        #     v_X_world =  vy·cos θ + vx·sin θ    (lateral in world)
-        #     v_Z_world =  vx·cos θ − vy·sin θ    (forward in world)
-        #
-        # Positions obtained by integration (cumulative sum).
+        # FIX (DATA-KIMODO-NATURAL-LOCO-014): the previous code rotated the
+        # already-world-frame components by θ (vy·cosθ + vx·sinθ, ...), which
+        # double-rotated the initial direction to 2·θ₀ for any non-forward
+        # heading (e.g. a "backward" arc started moving world-forward).  Only
+        # forward arcs (θ₀=0) were unaffected, which is why the original code
+        # passed PORT-008's forward-curve checks.  For θ₀=0 the two forms are
+        # identical (v_X = s·sinθ, v_Z = s·cosθ), so this is backward-compatible
+        # for all previously-validated arc configs.
+        speed = float(np.hypot(vx, vy))
         theta_0 = np.arctan2(vy, vx)
         theta = theta_0 + wz * t
 
-        v_X = vy * np.cos(theta) + vx * np.sin(theta)
-        v_Z = vx * np.cos(theta) - vy * np.sin(theta)
+        v_X = speed * np.sin(theta)
+        v_Z = speed * np.cos(theta)
 
         x = np.cumsum(v_X) * dt
         z = np.cumsum(v_Z) * dt
 
-        # Global root heading per frame (suppressed when emit_heading is False)
+        # Global root heading per frame (suppressed when emit_heading is False).
+        # The body faces the travel direction: initial heading θ₀ (+ any base
+        # `heading` offset), rotating at wz.  For θ₀=0 this is unchanged from
+        # the original `heading + wz·t`.
         if emit_heading is not False:
-            frame_headings = heading + wz * t
+            frame_headings = theta_0 + heading + wz * t
             headings = np.stack(
                 [np.cos(frame_headings), np.sin(frame_headings)], axis=-1
             ).astype(np.float32)
